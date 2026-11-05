@@ -29,6 +29,7 @@ def request_view(conn, task_id: str) -> dict:
     proposal = task.get("proposal")
     return {
         "id": task_id, "station_id": task["board_id"], "user_id": None,
+        "report_location_text": ticket["summary"] if ticket else None,
         "original_text": task["prompt"], "intent": "grocery" if task.get("grocery") else "purchase" if proposal else "maintenance" if ticket else "conversation" if interpretation.get("intent") == "conversation" else None,
         "status": status, "summary": task.get("reply") or task["prompt"] or "Waiting for your request",
         "question": task.get("reply") if status == "needs_clarification" else None,

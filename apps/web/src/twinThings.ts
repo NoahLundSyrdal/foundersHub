@@ -66,7 +66,8 @@ export function roomAt(x: number, z: number): string | null {
 export function thingForRequest(request: OfficeRequest): TwinThing | null {
   // Explicit room references override the input device's location. Do not guess
   // when a report names multiple rooms; it needs a more precise location.
-  const rooms = twinThings.filter((thing) => !thing.stationId && thing.mentions?.test(request.original_text));
+  const locationText = request.report_location_text || request.original_text;
+  const rooms = twinThings.filter((thing) => !thing.stationId && thing.mentions?.test(locationText));
   if (rooms.length) return rooms.length === 1 ? rooms[0] : null;
   const candidates = twinThings.filter((thing) => thing.stationId === request.station_id);
   if (candidates.length === 1) return candidates[0];

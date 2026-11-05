@@ -132,6 +132,7 @@ export type OfficeRequest = {
   station_id: z.infer<typeof StationId>;
   user_id: string | null;
   original_text: string;
+  report_location_text?: string | null;
   intent: Interpretation["intent"] | null;
   status: RequestStatus;
   summary: string;
@@ -276,3 +277,11 @@ export const StationActionAcknowledgementSchema = z.strictObject({
   status: z.enum(["delivered", "failed"]), detail: z.string().max(500).default(""),
 });
 export * from "./work.js";
+
+export const ChatMessageSchema = z.strictObject({
+  conversation_id: z.string().min(1).max(128),
+  event_id: z.string().min(1).max(128),
+  text: z.string().trim().min(1).max(2000),
+  board_id: StationId.default("office"),
+});
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;

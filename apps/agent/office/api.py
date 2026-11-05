@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
-from office import facility_api, oda_food, oda_api, work_api
+from office import chat_api, facility_api, oda_food, oda_api, work_api
 from office.facility_rules import FacilityReading
 
 
@@ -83,6 +83,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.include_router(facility_api.router(facilities))
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
+    app.include_router(chat_api.router(conn, mutation_lock))
 
     def board_or_404(board_id: str) -> config.Board:
         if board_id not in config.BOARDS:

@@ -1,3 +1,4 @@
+import type { ChatMessage } from "@office/contracts";
 import { useEffect, useRef, useState } from "react";
 import {
   proposalFingerprint,
@@ -32,6 +33,15 @@ const newestOf = (list: OfficeRequest[]) =>
   );
 
 export function App() {
+  const [conversationId] = useState(() => {
+    const saved = localStorage.getItem("office-conversation-id");
+    if (saved) return saved;
+    const id = crypto.randomUUID();
+    localStorage.setItem("office-conversation-id", id);
+    return id;
+  });
+  const [chatRequests, setChatRequests] = useState<OfficeRequest[]>([]);
+  const pendingChat = useRef<{text: string; station: string; id: string} | null>(null);
   const [stations, setStations] = useState<Station[]>([]),
     [requests, setRequests] = useState<OfficeRequest[]>([]),
     [health, setHealth] = useState<Health | null>(null);
@@ -57,15 +67,17 @@ export function App() {
         (newest?.status === "ordered" ? newest : undefined));
   async function refresh() {
     const sequence = ++refreshSequence.current;
-    const [nextStations, nextRequests, nextHealth] = await Promise.all([
+    const [nextStations, nextRequests, nextHealth, chat] = await Promise.all([
       api<Station[]>("/stations"),
       api<OfficeRequest[]>("/requests"),
       api<Health>("/health"),
+      api<{requests: OfficeRequest[]}>(`/chat/${encodeURIComponent(conversationId)}`),
     ]);
     if (sequence !== refreshSequence.current) return;
     setStations(nextStations);
     setRequests(nextRequests);
     setHealth(nextHealth);
+    setChatRequests(chat.requests);
     setConnectionError("");
   }
   useEffect(() => {
@@ -190,7 +202,7 @@ export function App() {
       >
         {focus?.grocery && <OdaFoodOrder request={focus} busy={busy} perform={perform} />}
         <AgentChat
-          requests={requests}
+          requests={chatRequests}
           stations={stations}
           where={where}
           askCount={askCount}
@@ -198,16 +210,12 @@ export function App() {
           offline={!!connectionError}
           error={error}
           onWhere={setWhere}
-          onSend={(text, stationId) =>
-            perform(async () => {
-              await sendEvent(stationId, "speech_transcript", { text });
-            })
-          }
-          onReply={(request, text) =>
-            perform(async () => {
-              await api<EventResponse>(`/requests/${request.id}/transcript`, { text });
-            })
-          }
+          onSend={(text, stationId) => perform(async () => {
+            if (!pendingChat.current || pendingChat.current.text !== text || pendingChat.current.station !== stationId)
+              pendingChat.current = { text, station: stationId, id: crypto.randomUUID() };
+            await api("/chat", { conversation_id: conversationId, event_id: pendingChat.current.id, text, board_id: stationId } satisfies ChatMessage);
+            pendingChat.current = null;
+          })}
           onApprove={approve}
           onReject={reject}
           onRequote={requote}
