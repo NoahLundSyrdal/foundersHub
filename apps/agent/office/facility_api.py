@@ -54,7 +54,7 @@ def _task_update(conn, task_id, status, reply, pending=None):
     return workflow.enrich_task(conn, db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)))
 
 
-def _execute_replenishment(conn, task_id, approved=False):
+async def _execute_replenishment(conn, task_id, approved=False):
     # Reuse the sole supplier boundary, including persisted attempts, limits and quote checks.
     from office.plugins.procurement import place_order
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
@@ -64,12 +64,12 @@ def _execute_replenishment(conn, task_id, approved=False):
     ctx = SimpleNamespace(deps=Deps(config.BOARDS[task["board_id"]], config.GUEST, task_id, conn),
                           tool_call_id=call_id, tool_call_approved=approved)
     proposal = value["proposal"]
-    reply = place_order(ctx, proposal["product"]["id"], proposal["quantity"])
+    reply = await place_order(ctx, proposal["product"]["id"], proposal["quantity"])
     order = db.row(conn, "SELECT id FROM orders WHERE task_id=?", task_id)
     return _task_update(conn, task_id, "done" if order else "failed", reply)
 
 
-def decide_replenishment(conn, task_id, approve, fingerprint=None):
+async def decide_replenishment(conn, task_id, approve, fingerprint=None):
     """Resume a deterministic proposal without calling an interpreter or chat model."""
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
     if not task or task["status"] != "awaiting_approval":
@@ -77,7 +77,7 @@ def decide_replenishment(conn, task_id, approve, fingerprint=None):
     if not approve:
         return _task_update(conn, task_id, "done", "Replenishment declined; no order was placed.")
     workflow.authorize_pending(conn, task_id, json.loads(task["pending"]), fingerprint)
-    return _execute_replenishment(conn, task_id, approved=True)
+    return await _execute_replenishment(conn, task_id, approved=True)
 
 
 class Telemetry(BaseModel):
@@ -127,7 +127,7 @@ class FacilityService:
             raise ValueError("Stock check must reference an approved supply for this station")
         return product
 
-    def prepare_stock_check(self, task_id, board_id, item_id, simulation=True):
+    async def prepare_stock_check(self, task_id, board_id, item_id, simulation=True):
         """A normalized stock_low edge already represents a completed deterministic check."""
         product = self.validate_stock_item(board_id, item_id)
         if type(simulation) is not bool:
@@ -142,10 +142,10 @@ class FacilityService:
         })
         incident = {"id": f"device-{task_id}", "board_id": board_id, "summary": rule.summary,
                     "severity": "routine", "simulation": simulation}
-        self._replenish(incident, rule, task_id=task_id)
+        await self._replenish(incident, rule, task_id=task_id)
         return workflow.enrich_task(self.conn, db.task_view(db.row(self.conn, "SELECT * FROM tasks WHERE id=?", task_id)))
 
-    def resume_stock_checks(self):
+    async def resume_stock_checks(self):
         # Registration is persisted before dispatch. Resume interrupted preparation,
         # while uncertain supplier execution remains a human reconciliation task.
         pending = db.rows(self.conn, """SELECT t.id,f.body FROM tasks t
@@ -158,7 +158,7 @@ class FacilityService:
                 continue
             event = json.loads(task["body"])
             try:
-                self.prepare_stock_check(task["id"], event["station_id"], event["payload"]["item_id"], event["payload"].get("simulation", True))
+                await self.prepare_stock_check(task["id"], event["station_id"], event["payload"]["item_id"], event["payload"].get("simulation", True))
             except (ValueError, KeyError, workflow.ProcurementConflict):
                 _task_update(self.conn, task["id"], "failed", "Stored stock check needs administrator review; no automatic retry.")
 
@@ -187,7 +187,7 @@ class FacilityService:
                           (ticket_id, task_id, incident["board_id"], summary, team, db.now()))
         return {"status": "created", "task_id": task_id, "ticket_id": ticket_id, "team": team, "local_only": True}
 
-    def _replenish(self, incident, rule, task_id=None):
+    async def _replenish(self, incident, rule, task_id=None):
         self.validate_rule(rule)
         task_id = task_id or _id(incident["id"], "replenish")
         task = db.row(self.conn, "SELECT * FROM tasks WHERE id=?", task_id)
@@ -228,11 +228,11 @@ class FacilityService:
             if value["approval_required"]:
                 _task_update(self.conn, task_id, "awaiting_approval", "Replenishment proposal ready for exact approval (simulated supplier).", pending)
             else:
-                _execute_replenishment(self.conn, task_id)
+                await _execute_replenishment(self.conn, task_id)
         task = db.row(self.conn, "SELECT status FROM tasks WHERE id=?", task_id)
         return {"status": task["status"], "task_id": task_id, "simulation": True}
 
-    def dispatch(self):
+    async def dispatch(self):
         snapshot = self.engine.snapshot()
         rules = {r["id"]: FacilityRule.model_validate(r) for r in snapshot["rules"]}
         changed = False
@@ -255,7 +255,7 @@ class FacilityService:
                     if action == "ticket":
                         result = self._ticket(incident)
                     elif action == "replenish":
-                        result = self._replenish(incident, rules[incident["rule_id"]])
+                        result = await self._replenish(incident, rules[incident["rule_id"]])
                     elif action == "sound":
                         command = self.outputs.enqueue(incident)
                         result = {"status": command["state"], "action_id": command["id"], "output": "station"}
@@ -277,19 +277,19 @@ class FacilityService:
             bus.publish("requests.updated", {}, source=self.conn)
         return changed
 
-    def tick(self):
-        self.resume_stock_checks()
+    async def tick(self):
+        await self.resume_stock_checks()
         changes = self.engine.tick()
-        changed = self.dispatch()
+        changed = await self.dispatch()
         if changes or changed:
             bus.publish("facility.updated", {}, source=self.conn)
         return changes
 
-    def ingest(self, reading):
+    async def ingest(self, reading):
         if reading.board_id not in config.BOARDS:
             raise ValueError("Unknown board")
         result = self.engine.ingest(reading)
-        self.dispatch()
+        await self.dispatch()
         active_boards = {i["board_id"] for i in self.engine.snapshot()["incidents"] if i["status"] == "active"}
         for incident in result["incidents"]:
             if incident["status"] == "recovered" and incident["board_id"] not in active_boards:
@@ -307,7 +307,7 @@ class FacilityService:
         while True:
             await asyncio.sleep(2)
             async with self.lock:
-                self.tick()
+                await self.tick()
 
 
 def router(service):
@@ -355,7 +355,7 @@ def router(service):
     @routes.get("/api/facility")
     async def state():
         async with service.lock:
-            service.tick()
+            await service.tick()
             return service.engine.snapshot()
 
     @routes.post("/api/facility/rules/{rule_id}")
@@ -377,7 +377,7 @@ def router(service):
     async def reading(body: FacilityReading):
         async with service.lock:
             try:
-                return service.ingest(body)
+                return await service.ingest(body)
             except ValueError as error:
                 raise HTTPException(400, str(error)) from error
 
@@ -403,7 +403,7 @@ def router(service):
                 "board_id": body.board_id, "metric": metric, "value": body.value,
                 "timestamp": body.timestamp or service.engine.snapshot()["evaluated_at"], "simulation": body.simulation})
             async with service.lock:
-                result = service.ingest(parsed)
+                result = await service.ingest(parsed)
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
         return {"accepted": True, "metric": metric, **result}

@@ -4,7 +4,7 @@ The TypeScript dashboard opens on the office twin. Its Three.js cutaway follows 
 
 Run `npm run setup:python` once to install Leo's Python app, then `npm run dev` to start the Python API on `127.0.0.1:3001` and the TypeScript frontend on `127.0.0.1:5173`. The dashboard uses the Python app's compatibility routes for stations, requests, exact approvals and device events; native task, state and button-listen events also refresh the view. Python state is stored separately from the old Node database in ignored `.data/agent.sqlite` (`AGENT_DATABASE_PATH` overrides it).
 
-The **Stage button** sits on the small stage in front of the burgundy chairs. Select its label or the 3D button to configure it. Device configuration supports names, station routes, placement presets and selecting a position directly on the floor. Add more buttons or level sensors from the Devices panel. Layout changes are saved only in the current browser; they do not reconfigure a board or change server policy.
+The **Stage button** sits on the small stage in front of the burgundy chairs. Select its label or the 3D button to see it, then open Settings to configure it. Device settings cover the name, station route and a position chosen directly on the floor. Add more buttons or level sensors from the list beside the model. Layout changes are saved only in the current browser; they do not reconfigure a board or change server policy.
 
 ## Physical button mapping
 
@@ -22,4 +22,4 @@ The current scene does not claim live stock telemetry. Connect a measured sensor
 
 ## View controls
 
-Drag to orbit, scroll or use the zoom controls, switch to Floor plan to place devices, and expand the scene for a presentation. Escape exits the expanded view. Station selectors and the device dropdown remain usable if WebGL is unavailable.
+Drag to orbit, scroll or use the zoom controls, and switch to Floor plan to place devices. Click any object or room in the model to see its status, reports and team beside it. The twin is a status page: people ask for things in the chat under the agent, and each report updates the matching object, station pin and details as soon as the server changes it. A ticket exists only for a real need, something to buy or fix; greetings and questions stay in the chat. Tickets and approvals live on the Tickets page, and approvals also appear in the chat. The lists beside the model remain usable if WebGL is unavailable.

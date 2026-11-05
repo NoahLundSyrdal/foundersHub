@@ -11,7 +11,7 @@ toolset = FunctionToolset()
 
 
 @toolset.tool
-def create_ticket(ctx: RunContext[Deps], summary: str, team: str | None = None) -> str:
+async def create_ticket(ctx: RunContext[Deps], summary: str, team: str | None = None) -> str:
     """Report something broken or needing attention. Defaults to the responsible team at this board."""
     team = team or ctx.deps.board.responsible_team
     ctx.deps.db.execute(
@@ -22,7 +22,7 @@ def create_ticket(ctx: RunContext[Deps], summary: str, team: str | None = None) 
 
 
 @toolset.tool
-def office_status(ctx: RunContext[Deps]) -> dict:
+async def office_status(ctx: RunContext[Deps]) -> dict:
     """What's currently open in the office: open orders and tickets."""
     return {
         "open_orders": db.rows(ctx.deps.db, "SELECT product_id, quantity, ref, created_at FROM orders WHERE status = 'simulated'"),

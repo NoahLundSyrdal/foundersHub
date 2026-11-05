@@ -12,7 +12,7 @@ toolset = FunctionToolset()
 
 
 @toolset.tool
-def search_catalogue(ctx: RunContext[Deps], query: str) -> list[dict]:
+async def search_catalogue(ctx: RunContext[Deps], query: str) -> list[dict]:
     """Search station-approved items; the prepared quote contains compared supplier offers."""
     stations, products, _, _ = workflow.current_configuration()
     station = next((s for s in stations if s["id"] == ctx.deps.board.id), None)
@@ -26,7 +26,7 @@ def search_catalogue(ctx: RunContext[Deps], query: str) -> list[dict]:
 
 
 @toolset.tool
-def place_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> str:
+async def place_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> str:
     """Execute the exact prepared quote in simulation; human review follows office and severity policy."""
     conn, task_id = ctx.deps.db, ctx.deps.task_id
     workflow.ensure_schema(conn)

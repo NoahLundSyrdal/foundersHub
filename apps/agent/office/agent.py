@@ -52,7 +52,7 @@ office_agent = Agent(
 
 
 @office_agent.instructions
-def context(ctx: RunContext[Deps]) -> str:
+async def context(ctx: RunContext[Deps]) -> str:
     b, p = ctx.deps.board, ctx.deps.person
     others = ", ".join(f"{x.id} ({x.location}: {', '.join(sorted(x.modules))})" for x in config.BOARDS.values())
     return (
@@ -83,6 +83,31 @@ def _update(conn, task_id: str, **fields) -> dict:
     return task
 
 
+def _close_failed_run(conn, task_id: str, reply: str) -> dict:
+    """Record a run that stopped early. Only a real execution attempt can make an order uncertain."""
+    procurement_workflow.ensure_schema(conn)
+    attempt = db.row(conn, "SELECT state, reference FROM procurement_attempts WHERE task_id = ?", task_id)
+    if attempt and attempt["state"] == "confirmed":
+        reply = f"Ordered (simulated), ref {attempt['reference']}."
+        return _update(conn, task_id, status="done", reply=reply, pending="[]")
+    if not attempt:
+        procurement_workflow.release_quote(conn, task_id)
+    return _update(conn, task_id, status="failed", reply=reply, pending="[]")
+
+
+def recover_interrupted(conn) -> None:
+    """Runs don't survive a restart, so close any left running instead of showing them as live forever."""
+    registered_checks = db.row(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='facility_device_inputs'")
+    for task in db.rows(conn, "SELECT id FROM tasks WHERE status = 'running'"):
+        if registered_checks and db.row(conn, """SELECT 1 FROM device_events d
+            JOIN facility_device_inputs f ON f.id=d.event_id
+            WHERE d.task_id=? AND json_extract(f.body,'$.type')='stock_low'""", task["id"]):
+            # The facility handler resumes a persisted check without a model and
+            # stops uncertain supplier attempts for explicit reconciliation.
+            continue
+        _close_failed_run(conn, task["id"], "This was interrupted by a restart. Please send it again.")
+
+
 def start_task(conn, board_id: str, person_name: str, text: str) -> str:
     """Create a new input task; explicit transcript endpoints continue clarification."""
     task_id = db.new_id()
@@ -111,6 +136,9 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
             return _update(conn, task_id, status="done", reply=reply) | {"command": db.set_command(conn, board.id, reply, "amber")}
         if prompt is not None and decision["assessment"]["severity"] == "critical" and not decision["item_id"]:
             reply = "Critical safety report requires immediate human review; no automatic order was placed."
+            # A local record for the responsible team, so the report can be followed and closed.
+            conn.execute("INSERT INTO tickets VALUES (?, ?, ?, ?, ?, 'open', ?)",
+                         (db.new_id(), task_id, board.id, decision["summary"], board.responsible_team, db.now()))
             return _update(conn, task_id, status="done", reply=reply) | {"command": db.set_command(conn, board.id, reply, "red")}
         if prompt is not None and decision["item_id"]:
             prompt += f"\nValidated need: {decision['quantity']} {decision['item_id'].replace('-', ' ')}. Use only these exact order arguments."
@@ -123,11 +151,10 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
             usage_limits=UsageLimits(request_limit=6, tool_calls_limit=10, total_tokens_limit=16000),
         )
     except Exception as e:  # demo: surface any failure on the board instead of crashing the request
-        reply = f"Sorry, something went wrong: {type(e).__name__}"
-        bus.publish("board.say", {"board_id": board.id, "text": reply})
-        return _update(conn, task_id, status="failed", reply=reply) | {
-            "command": db.set_command(conn, board.id, reply, "red")
-        }
+        task = _close_failed_run(conn, task_id, f"Sorry, something went wrong: {type(e).__name__}")
+        bus.publish("board.say", {"board_id": board.id, "text": task["reply"]})
+        color = "green" if task["status"] == "done" else "red"
+        return task | {"command": db.set_command(conn, board.id, task["reply"], color)}
 
     out = result.output
     if isinstance(out, DeferredToolRequests):
@@ -152,7 +179,7 @@ async def decide(conn, task_id: str, approve: bool, proposal_fingerprint: str | 
     if prepared and prepared.get("source") == "facility-rule":
         from office.facility_api import decide_replenishment
         try:
-            return decide_replenishment(conn, task_id, approve, proposal_fingerprint)
+            return await decide_replenishment(conn, task_id, approve, proposal_fingerprint)
         except procurement_workflow.ProcurementConflict as error:
             raise StaleApproval(str(error)) from error
     t = db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)

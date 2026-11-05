@@ -11,7 +11,7 @@ toolset = FunctionToolset()
 
 
 @toolset.tool
-def read_sensors(ctx: RunContext[Deps]) -> list[dict]:
+async def read_sensors(ctx: RunContext[Deps]) -> list[dict]:
     """Latest reading of every sensor on this board (temperature °C, humidity %, stock_level %, ...)."""
     return db.rows(
         ctx.deps.db,

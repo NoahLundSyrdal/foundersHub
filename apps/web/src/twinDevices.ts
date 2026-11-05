@@ -8,11 +8,11 @@ export type TwinDevice = {
   position: { x: number; z: number };
   tracking: { label: string; unit: string; min: number; max: number; value: number; warningBelow: number };
 };
-const storageKey = "office-twin-devices-v1";
+const storageKey = "office-twin-devices-v2";
 export const defaultTwinDevices: TwinDevice[] = [
   { id: "stage-button", name: "Stage button", kind: "button", stationId: "kitchen", position: { x: -5.65, z: 6.7 }, tracking: { label: "Button input", unit: "", min: 0, max: 100, value: 0, warningBelow: 15 } },
-  { id: "coffee-level-demo", name: "Coffee level", kind: "level", stationId: "kitchen", position: { x: 5.25, z: -1.5 }, tracking: { label: "Coffee remaining", unit: "%", min: 0, max: 100, value: 62, warningBelow: 20 } },
-  { id: "bathroom-level-demo", name: "Paper level", kind: "level", stationId: "bathroom", position: { x: 7.15, z: -5.35 }, tracking: { label: "Paper remaining", unit: "%", min: 0, max: 100, value: 28, warningBelow: 20 } },
+  { id: "coffee-level-demo", name: "Coffee level", kind: "level", stationId: "kitchen", position: { x: 3.4, z: -1.2 }, tracking: { label: "Coffee remaining", unit: "%", min: 0, max: 100, value: 62, warningBelow: 20 } },
+  { id: "bathroom-level-demo", name: "Paper level", kind: "level", stationId: "bathroom", position: { x: 8.45, z: -4.1 }, tracking: { label: "Paper remaining", unit: "%", min: 0, max: 100, value: 28, warningBelow: 20 } },
 ];
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

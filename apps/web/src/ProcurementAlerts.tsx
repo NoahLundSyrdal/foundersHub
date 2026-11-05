@@ -22,7 +22,7 @@ export function ProcurementAlerts() {
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [sending, setSending] = useState<Set<string>>(new Set());
-  const [connected, setConnected] = useState(false);
+  const [expanded, setExpanded] = useState<boolean | null>(null);
   const refreshRef = useRef<() => void>(() => {});
   const mounted = useRef(false);
   const requests = useRef(new Set<AbortController>());
@@ -60,6 +60,8 @@ export function ProcurementAlerts() {
     };
     refresh();
     startFallback();
+    // The stream can hang silently after an API restart, so re-read regularly too.
+    const renewal = setInterval(refresh, 20000);
     let stream: EventSource | undefined;
     try {
       stream = new EventSource("/api/events");
@@ -68,22 +70,21 @@ export function ProcurementAlerts() {
       stream.addEventListener("state.changed", refresh);
       stream.onopen = () => {
         if (disposed) return;
-        setConnected(true);
         stopFallback();
         refresh();
       };
       stream.onerror = () => {
         if (disposed) return;
-        setConnected(false);
         startFallback();
       };
     } catch {
-      setConnected(false);
+      // The polling fallback keeps running.
     }
     return () => {
       disposed = true;
       mounted.current = false;
       refreshRef.current = () => {};
+      clearInterval(renewal);
       stopFallback();
       stream?.close();
       for (const controller of requests.current) controller.abort();
@@ -121,14 +122,21 @@ export function ProcurementAlerts() {
     (alert.severity === "urgent" || alert.severity === "critical"))
     .sort((a, b) => Number(b.severity === "critical") - Number(a.severity === "critical") ||
       b.created_at.localeCompare(a.created_at));
+  // One line unless something is critical, so alerts don't push the office out of view.
+  const critical = outstanding.some((alert) => alert.severity === "critical");
+  // A new critical alert reopens the bar, even if someone collapsed it earlier.
+  const criticalKey = outstanding.filter((alert) => alert.severity === "critical").map((alert) => alert.id).join();
+  useEffect(() => setExpanded(null), [criticalKey]);
   if (!outstanding.length && !loadError && !actionError) return null;
+  const top = outstanding[0];
 
   return (
     <section className="procurement-alerts" aria-label="Procurement alerts">
-      <details open>
+      <details open={expanded ?? (critical || !!actionError)} onToggle={(event) => setExpanded(event.currentTarget.open)}>
         <summary>
           <strong>Attention needed</strong>
           <span className="procurement-alerts__count">{outstanding.length} unacknowledged</span>
+          {top && <span className="procurement-alerts__top"><b>{top.severity}:</b> {top.title}</span>}
         </summary>
         <p className="procurement-alerts__explanation">
           Acknowledging marks a message as seen. It does not approve spending or resolve the issue.
@@ -152,10 +160,11 @@ export function ProcurementAlerts() {
             </li>
           ))}
         </ul>
-        <p className="procurement-alerts__connection">
-          {outstanding.length > VISIBLE_LIMIT && `Showing ${VISIBLE_LIMIT} of ${outstanding.length}; acknowledging reveals the next message. `}
-          {connected ? "Live updates connected." : "Live updates reconnecting; checking every 5 seconds."}
-        </p>
+        {outstanding.length > VISIBLE_LIMIT && (
+          <p className="procurement-alerts__connection">
+            Showing {VISIBLE_LIMIT} of {outstanding.length}. Acknowledging reveals the next one.
+          </p>
+        )}
       </details>
     </section>
   );
