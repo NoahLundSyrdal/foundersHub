@@ -18,7 +18,30 @@ The last command creates an awaiting-input request. Enter a transcript for it in
 the dashboard. Simulation emits one event and prints the API response and device
 feedback command. It does not capture speech, recognise speakers, or program a board.
 
-## USB hardware
+## Real board: atech SDK (use this)
+
+The board runs firmware built with the official `atech` SDK. The template is in
+[`firmware/office_station/project.yaml`](firmware/office_station/project.yaml). **Its ports are
+`TODO`:** fill in the real port of every module first (`atech view` shows the board), then:
+
+```sh
+uv venv apps/device/.venv && uv pip install --python apps/device/.venv './apps/device[atech]'
+cd apps/device/firmware/office_station
+../../.venv/bin/atech validate . && ../../.venv/bin/atech build . && ../../.venv/bin/atech upload .
+../../.venv/bin/atech check          # which modules answered; output modules need your eyes
+cd - && apps/device/.venv/bin/python apps/device/src/atech_bridge.py
+```
+
+The first build downloads the ESP32 compiler (~2.4 GB, once). `atech_bridge.py` turns
+`btn_<station>` presses into `button_pressed` events (push-to-talk) and posts throttled
+temperature, humidity and distance readings to `/api/sensor`. It also shows each station's latest
+command on the screen (custom `office_say` action) and its colour on `led_<station>_fill`. Only one
+program can hold the port, so stop `atech monitor` first. Nothing here has run on the real board yet.
+
+## USB hardware (legacy raw-serial bridge)
+
+Superseded by `atech_bridge.py` above. Note that SDK firmware sends button presses as `value: 1`,
+which this path ignores.
 
 Use Python 3.10+ and an isolated environment:
 
@@ -49,9 +72,7 @@ infer release transitions from polling.
 
 ## Contracts and failure behaviour
 
-- Canonical contract: `packages/contracts/src/index.ts`. Generate its portable
-  schema with root `npm run contracts:export`; output is
-  `packages/contracts/device-event.schema.json`.
+- Contract: `DeviceEvent` in `apps/agent/office/api.py` (`POST /api/device-events`).
 - Canonical events may also be sent as serial JSON lines. The bridge checks basic
   fields locally; the API remains the authoritative schema validator.
 - Network failures and HTTP 429/502/503/504 retry twice using the **same event ID**.

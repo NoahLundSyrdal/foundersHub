@@ -9,7 +9,6 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@office/contracts": "0.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

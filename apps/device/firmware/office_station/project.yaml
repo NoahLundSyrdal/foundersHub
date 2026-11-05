@@ -1,0 +1,44 @@
+# Office station firmware for the 14-port board (atech SDK). Owner: hardware.
+#
+# PORTS ARE NOT CONFIRMED. Replace every TODO with the port the module is actually in
+# (`atech view .` shows the board; compare with the one in your hand), then:
+#   atech validate . && atech build . && atech upload . && atech check
+# First build downloads the ESP32 compiler (~2.4 GB, once).
+#
+# Contract with apps/device/src/atech_bridge.py:
+#   events  btn_kitchen / btn_bathroom / btn_printer = 1 on press   -> push-to-talk for that station
+#           aht20_temperature, aht20_humidity, distance_sensor_min_distance, microphone_level
+#   actions led_<station>_fill {"r","g","b"}  (built in)
+#           office_say "<text>"               (custom, below: shows text on the screen)
+name: office_station
+board: 14port
+modules:
+  - {id: button,          instance: btn_kitchen,    port: TODO}
+  - {id: button,          instance: btn_bathroom,   port: TODO}
+  - {id: button,          instance: btn_printer,    port: TODO}
+  - {id: neopixel,        instance: led_kitchen,    port: TODO}
+  - {id: neopixel,        instance: led_bathroom,   port: TODO}
+  - {id: neopixel,        instance: led_printer,    port: TODO}
+  - {id: st7735_tft,      instance: tft,            ports: [TODO, TODO]}
+  - {id: aht20,           instance: aht20,          port: TODO}
+  - {id: distance_sensor, instance: distance_sensor, port: TODO}
+  - {id: microphone,      instance: microphone,     ports: [TODO, TODO]}
+code:
+  loop: |
+    if (atech_action == "office_say") {
+      // 160x80 screen, size-1 font: 26 chars x 7 lines. Simple hard wrap.
+      String t = atech_value;
+      tft.clear();
+      tft.setTextSize(1);
+      tft.setTextColor(ST7735_TFT::COLOR_WHITE);
+      int y = 4;
+      while (t.length() > 0 && y < 76) {
+        int n = t.length() < 26 ? t.length() : 26;
+        tft.setCursor(2, y);
+        tft.print(t.substring(0, n).c_str());
+        t = t.substring(n);
+        y += 11;
+      }
+      tft.display();
+      atechDone();
+    }

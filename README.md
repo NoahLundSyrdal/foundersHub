@@ -1,89 +1,73 @@
-# Founders Hub · Office assistant
+# Founders Hub · Office agent
 
-A local hackathon foundation for an office assistant that receives requests from physical stations, turns them into purchase proposals or maintenance tickets, and tracks the outcome.
+An office assistant embodied in Atech boards around the office. Press a board's button, say what you need, and the agent does it: it orders supplies, logs broken things, or messages another room. It asks a human only when policy requires it.
 
-**Default mode is simulated.** No payment, supplier order, plumber booking, or message to a third party is performed. Catalogue prices and delivery estimates are fixtures. Speaker identification is not implemented.
+**Orders are simulated.** No payment, supplier order or third-party message happens. Catalogue prices and delivery estimates are fixtures.
+
+Plan, architecture and team split: [docs/agent-plan.md](docs/agent-plan.md). Demo script: [docs/demo.md](docs/demo.md).
 
 ## Start locally
 
-Requirements: Node.js **22.13 or newer**, npm, and Python **3.10 or newer**. The backend uses Node's built-in SQLite support; Node may print an experimental-feature warning.
+Requirements: Node.js 22.13+, npm, [uv](https://docs.astral.sh/uv/) (it installs Python 3.12+ itself).
 
 ```sh
-npm install
 cp .env.example .env
-npm run dev
+npm run setup        # npm install + uv sync for apps/agent
+npm run dev          # API on 127.0.0.1:3001, dashboard on http://localhost:5173
 ```
 
-Open **http://localhost:5173**. The backend listens on **http://127.0.0.1:3001**. The web app proxies `/api` to the backend. This foundation is intended for local development, without production authentication; keep it bound to loopback.
+The default `OFFICE_MODEL=mock` is an offline keyword model, so it needs no API key. For the real agent, set `OFFICE_MODEL=anthropic:claude-sonnet-5-5` and `ANTHROPIC_API_KEY` in `.env`.
 
-No API key is needed in the default mock mode. `AGENT_PROVIDER=anthropic` is the optional Claude interpretation adapter: configure `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` in the ignored `.env` file. The example model is `claude-sonnet-5-5`; change it if your API account uses a different supported model. Supplier execution remains simulated regardless of the interpretation provider.
+## Try it
 
-## Try the flow
-
-1. Choose the kitchen station and press its simulated button.
-2. Enter `We need coffee` and submit the transcript.
-3. Inspect the product, quantity, total, and simulated delivery estimate.
-4. Approve that exact proposal. The request receives a **simulated** order confirmation.
-5. Repeat the request to see duplicate handling, or report `The coffee machine is leaking` to create a maintenance ticket.
-
-The dashboard includes a low-stock simulation. A sensor event enters the same request workflow without requiring speech. Browser voice input depends on browser support and microphone permission; typed transcripts are always available.
-
-You can also simulate a device from another terminal while the backend runs:
-
-```sh
-npm run device:simulate
-```
-
-See [the demo guide](docs/demo.md) for the full sequence and [hardware notes](docs/hardware.md) before connecting a real board.
+1. On the dashboard, pick a speaker on the Kitchen board (this stands in for voice ID) and send `We need coffee`.
+   - As **Leo** (office manager, auto-approves up to 500 NOK), it orders right away, simulated.
+   - As **guest**, it asks for approval. Approve it under "Needs approval".
+2. Send it again. The agent sees the open order and does not buy twice.
+3. Send `The coffee machine is leaking`. This creates a local ticket for the responsible team.
+4. Run `npm run device:simulate` in another terminal to send a request through the device bridge.
+5. Low stock: `curl -X POST localhost:3001/api/sensor -H 'content-type: application/json' -d '{"board_id":"bathroom","kind":"stock_level","value":12}'`. A reading that crosses the threshold starts the agent without anyone speaking.
 
 ## Repository
 
 ```text
-apps/web/                 React dashboard, browser voice input, approvals
-apps/server/              API, request workflow, Claude adapter, SQLite
-apps/device/              Python USB bridge, simulator, device tests
-packages/contracts/       Shared TypeScript schemas and generated JSON Schema
-config/stations.json      Station locations, equipment, teams, catalogue scope
-config/office.json        Office preferences and spending policy
-fixtures/products.json    Explicitly simulated catalogue
+apps/agent/              Python backend: FastAPI + Pydantic AI + SQLite
+  office/agent.py        the agent, task run/pause/resume
+  office/api.py          HTTP API (the contract) + device-bridge routes
+  office/plugins/        capabilities: one file = toolset + required hardware modules
+  office/voice.py        speech-to-text + speaker ID (owner: voice)
+  office/mock.py         offline model for tests and no-key dev
+apps/web/                React dashboard: boards, approvals, live tool activity
+apps/device/             Atech USB bridge and simulator
+config/boards.json       boards: location, plugged-in modules, sensor triggers
+config/people.json       people → role → auto-approve limit
+config/office.json       office spend cap and preferences
+fixtures/products.json   simulated catalogue
+docs/pydantic-ai/        vendored Pydantic AI docs
+docs/atech.md            Atech platform and SDK reference
 ```
-
-The backend owns persistent state and purchase execution. The web app and device bridge call its API; neither writes the database directly.
-
-## Team ownership
-
-| Owner | Area | First integration milestone |
-| --- | --- | --- |
-| 1 · Hardware | `apps/device/`, actual port mapping | Button event reaches API; feedback reaches board |
-| 2 · Agent and speech | `apps/server/src/agent/`, speech adapter | Transcript plus station produces validated intent |
-| 3 · Procurement | `apps/server/src/procurement/`, supplier adapters | Approved proposal produces a tracked execution result |
-| 4 · Dashboard and integration | `apps/web/`, core API/database | Full request → approval → confirmation flow |
-
-Agree contract changes in `packages/contracts/` before changing callers. Use short-lived branches and integrate early. Keep one integration owner; avoid editing another owner's files without coordinating.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
+| `npm run setup` | Install web and Python dependencies |
 | `npm run dev` | API and dashboard together |
-| `npm run dev:server` | API only |
-| `npm run dev:web` | Dashboard only |
-| `npm run check` | Type-check workspaces |
-| `npm run build` | Build dashboard assets |
-| `npm test` | Backend tests and Python device tests |
-| `npm run contracts:export` | Regenerate device JSON Schema from shared contracts |
-| `npm run device:simulate` | Submit a sample kitchen request to a running API |
+| `npm run dev:agent` / `npm run dev:web` | One of them |
+| `npm test` | Backend tests (mock model) + device bridge tests |
+| `npm run check` / `npm run build` | Type-check / build the dashboard |
+| `npm run device:simulate` | Send a sample kitchen request through the bridge |
 
-Runtime database files live in ignored `.data/` by default. Stop the backend before removing its database to reset local demo data. Never commit `.env`, recordings, credentials, or runtime databases.
+Runtime data lives in the gitignored `.data/`. Stop the API before deleting it to reset. Never commit `.env`, recordings, voice embeddings or databases.
 
-## Technology choices
+## API
 
-The foundation uses current React/TypeScript tooling, Fastify, schema-validated contracts, and a single SQLite owner so the four developers can integrate quickly. The live Claude path uses the official Anthropic SDK with bounded tool use and streamed progress; the mock path remains available for offline development and deterministic tests. These choices make the system inspectable and extensible, rather than asserting that a framework or model alone makes it state of the art.
-
-The important technical boundaries are explicit tools, validated decisions, approval tied to an exact proposal, persisted execution attempts, and idempotent input. Real-time speech, speaker identity, supplier search, and checkout remain separate integrations. See [the architecture rationale](docs/architecture.md#technology-rationale).
-
-## What to build next
-
-This foundation uses a fixed approved catalogue, not live search or a quality/price/delivery ranking engine. Real purchasing needs a supplier adapter, confirmed delivery terms, authenticated approval, credentials, and reconciliation of uncertain execution results. Maintenance tickets are local records, not actual contractor bookings.
-
-See [architecture and API contracts](docs/architecture.md), [demo steps](docs/demo.md), and [hardware setup](docs/hardware.md). MCP can expose the same backend capabilities later; it is not required to connect the first three apps.
+| Route | Purpose |
+| --- | --- |
+| `POST /api/input` | `{board_id, text?, audio_b64?, person?}` runs the agent. Returns the task. |
+| `POST /api/sensor` | `{board_id, kind, value}` stores a reading and fires board triggers when a threshold is crossed |
+| `GET /api/state` | Tasks, orders, tickets, latest board commands |
+| `POST /api/tasks/{id}/decide` | `{approve}` resolves a pending approval (409 if stale) |
+| `GET /api/events` | SSE: `task.updated`, `tool.called`, `tool.result`, `board.say`, `board.listen` |
+| `GET /api/boards` | Boards and people |
+| `POST /api/device-events`, `GET /api/devices/{id}/command` | Device bridge (idempotent on `event_id`) |
