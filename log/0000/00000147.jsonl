@@ -1,0 +1,1 @@
+{"id":"mw3qbbd664a9c174","member":"noah-lund-syrdal-b43119","lamport":224,"ts":1793894241354,"type":"upsert","kind":"task","key":"facility-usb-live-test","data":{"title":"Test physical USB board readings through deterministic threshold and alarm","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["apps/device","apps/agent/office/facility_api.py"]},"source":"explicit"}
