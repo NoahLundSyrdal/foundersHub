@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { OfficeRequest } from "@office/contracts";
+import { Avatar, type Mood } from "./Avatar";
 import { money, stamp } from "./format";
-
-type Mood = "idle" | "working" | "waiting" | "done" | "failed";
 
 const PACE_MS = 500;
 const FRESH_MS = 5000;
@@ -137,7 +136,7 @@ export function AgentStage({
           note: "Press a station when something runs out or breaks.",
         }
       : catchingUp && step < workingCaptions.length
-        ? { title: workingCaptions[step] }
+        ? { title: workingCaptions[Math.max(step, 0)] }
         : caption(request);
   return (
     <section className={`stage field-${base}`} aria-label="Agent status">
@@ -155,14 +154,7 @@ export function AgentStage({
             Simulation{provider ? ` · ${provider} agent` : ""}
           </span>
         </header>
-        <div className="eyes" aria-hidden="true">
-          <span className="eye-look">
-            <span className="eye" />
-          </span>
-          <span className="eye-look">
-            <span className="eye" />
-          </span>
-        </div>
+        <Avatar mood={mood} request={offline ? undefined : request} />
         <div className="stage-copy" aria-live="polite">
           <div className="stage-meta">
             <strong>
@@ -172,7 +164,10 @@ export function AgentStage({
             </strong>
             {stationName && !offline && <span>{stationName}</span>}
           </div>
-          <p key={text.title} className="stage-title">
+          <p
+            key={text.title}
+            className={`stage-title ${text.title.length > 48 ? "long" : ""}`}
+          >
             {text.title}
           </p>
           {text.note && <p className="stage-note">{text.note}</p>}

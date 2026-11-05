@@ -9,6 +9,7 @@ import {
 import { AgentStage } from "./AgentStage";
 import { api } from "./api";
 import { money, stamp } from "./format";
+import { HistoryView } from "./HistoryView";
 
 type Health = {
   agent_provider: string;
@@ -52,7 +53,8 @@ export function App() {
     [notice, setNotice] = useState(""),
     [connectionError, setConnectionError] = useState(""),
     [listening, setListening] = useState(false),
-    [streamConnected, setStreamConnected] = useState(false);
+    [streamConnected, setStreamConnected] = useState(false),
+    [view, setView] = useState<"desk" | "history">("desk");
   const recognition = useRef<Recognition | null>(null);
   const refreshSequence = useRef(0);
   const followed = useRef("");
@@ -244,259 +246,289 @@ export function App() {
             {notice}
           </div>
         )}
-        <section aria-label="Station simulator">
-          <div className="section-head">
-            <h2>Stations</h2>
-            <span>Simulated hardware</span>
-          </div>
-          <div className="stations">
-            {stations.map((station) => (
-              <button
-                className="station"
-                key={station.id}
-                disabled={busy || listening}
-                onClick={() => press(station)}
-              >
-                <StationIcon id={station.id} />
-                <strong>{station.name}</strong>
-                <small>{station.equipment.join(" · ")}</small>
-              </button>
-            ))}
-          </div>
+        <nav className="views" aria-label="Views">
           <button
-            className="text-button"
-            disabled={busy || listening}
-            onClick={stockLow}
+            aria-pressed={view === "desk"}
+            onClick={() => setView("desk")}
           >
-            Simulate the bathroom sensor at 15% toilet paper
+            Desk
           </button>
-        </section>
-        {active && (
-          <section className="request" aria-label="Request details">
-            <div className="section-head">
-              <h2>{active.summary || "New request"}</h2>
-              <span>
-                {statusLabels[active.status] ?? active.status}
-              </span>
-            </div>
-            {active.original_text && (
-              <blockquote>“{active.original_text}”</blockquote>
-            )}
-            {active.question && <p className="question">{active.question}</p>}
-            {(["awaiting_input", "needs_clarification"].includes(
-              active.status,
-            ) ||
-              (active.status === "failed" && !active.proposal)) && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  submit();
-                }}
+          <button
+            aria-pressed={view === "history"}
+            onClick={() => setView("history")}
+          >
+            History
+          </button>
+        </nav>
+        {view === "history" ? (
+          <HistoryView
+            requests={requests}
+            stations={stations}
+            statusLabels={statusLabels}
+            onOpen={(id) => {
+              setSelected(id);
+              setText("");
+              setNotice("");
+              setView("desk");
+            }}
+          />
+        ) : (
+          <>
+            <section aria-label="Station simulator">
+              <div className="section-head">
+                <h2>Stations</h2>
+                <span>Simulated hardware</span>
+              </div>
+              <div className="stations">
+                {stations.map((station) => (
+                  <button
+                    className="station"
+                    key={station.id}
+                    disabled={busy || listening}
+                    onClick={() => press(station)}
+                  >
+                    <StationIcon id={station.id} />
+                    <strong>{station.name}</strong>
+                    <small>{station.equipment.join(" · ")}</small>
+                  </button>
+                ))}
+              </div>
+              <button
+                className="text-button"
+                disabled={busy || listening}
+                onClick={stockLow}
               >
-                <label htmlFor="transcript">What’s missing or broken?</label>
-                <textarea
-                  id="transcript"
-                  value={text}
-                  maxLength={2000}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder={
-                    active.station_id === "kitchen"
-                      ? "We’re out of coffee"
-                      : active.station_id === "bathroom"
-                        ? "We need more paper"
-                        : "The printer is broken"
-                  }
-                  disabled={busy}
-                />
-                <div className="form-actions">
-                  <button
-                    type="submit"
-                    className="primary"
-                    disabled={busy || listening || !text.trim()}
-                  >
-                    {busy ? "Sending…" : "Send request"}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={!SpeechRecognition || busy}
-                    onClick={() =>
-                      listening ? recognition.current?.stop() : startSpeech()
-                    }
-                  >
-                    {listening ? "Stop listening" : "Use microphone"}
-                  </button>
+                Simulate the bathroom sensor at 15% toilet paper
+              </button>
+            </section>
+            {active && (
+              <section className="request" aria-label="Request details">
+                <div className="section-head">
+                  <h2>{active.summary || "New request"}</h2>
+                  <span>
+                    {statusLabels[active.status] ?? active.status}
+                  </span>
                 </div>
-                <p className="hint">
-                  {SpeechRecognition
-                    ? "Your browser’s speech service may process the audio. Check the text before sending."
-                    : "This browser has no speech recognition. Type your request instead."}
-                </p>
-              </form>
-            )}
-            {active.proposal && (
-              <div className="proposal">
-                <h3>{active.proposal.product.name}</h3>
-                <dl>
-                  <div>
-                    <dt>Supplier</dt>
-                    <dd>{active.proposal.product.supplier}</dd>
+                {active.original_text && (
+                  <blockquote>“{active.original_text}”</blockquote>
+                )}
+                {active.question && <p className="question">{active.question}</p>}
+                {(["awaiting_input", "needs_clarification"].includes(
+                  active.status,
+                ) ||
+                  (active.status === "failed" && !active.proposal)) && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      submit();
+                    }}
+                  >
+                    <label htmlFor="transcript">What’s missing or broken?</label>
+                    <textarea
+                      id="transcript"
+                      value={text}
+                      maxLength={2000}
+                      onChange={(e) => setText(e.target.value)}
+                      placeholder={
+                        active.station_id === "kitchen"
+                          ? "We’re out of coffee"
+                          : active.station_id === "bathroom"
+                            ? "We need more paper"
+                            : "The printer is broken"
+                      }
+                      disabled={busy}
+                    />
+                    <div className="form-actions">
+                      <button
+                        type="submit"
+                        className="primary"
+                        disabled={busy || listening || !text.trim()}
+                      >
+                        {busy ? "Sending…" : "Send request"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={!SpeechRecognition || busy}
+                        onClick={() =>
+                          listening ? recognition.current?.stop() : startSpeech()
+                        }
+                      >
+                        {listening ? "Stop listening" : "Use microphone"}
+                      </button>
+                    </div>
+                    <p className="hint">
+                      {SpeechRecognition
+                        ? "Your browser’s speech service may process the audio. Check the text before sending."
+                        : "This browser has no speech recognition. Type your request instead."}
+                    </p>
+                  </form>
+                )}
+                {active.proposal && (
+                  <div className="proposal">
+                    <h3>{active.proposal.product.name}</h3>
+                    <dl>
+                      <div>
+                        <dt>Supplier</dt>
+                        <dd>{active.proposal.product.supplier}</dd>
+                      </div>
+                      <div>
+                        <dt>Quantity</dt>
+                        <dd>{active.proposal.quantity}</dd>
+                      </div>
+                      <div>
+                        <dt>Delivery</dt>
+                        <dd>{active.proposal.product.delivery_estimate}</dd>
+                      </div>
+                      <div className="total">
+                        <dt>Total</dt>
+                        <dd>{money(active.proposal.total_nok)}</dd>
+                      </div>
+                    </dl>
+                    {active.status === "awaiting_approval" && (
+                      <button
+                        className="primary full"
+                        disabled={busy}
+                        onClick={() =>
+                          void perform(async () => {
+                            await api<OfficeRequest>(
+                              `/requests/${active.id}/approve`,
+                              {
+                                proposal_fingerprint: proposalFingerprint(
+                                  active.proposal!,
+                                ),
+                              },
+                            );
+                            setNotice(
+                              "Simulated order confirmed. No money was spent.",
+                            );
+                          })
+                        }
+                      >
+                        {busy ? "Processing…" : "Approve simulated order"}
+                      </button>
+                    )}
+                    <p className="hint">
+                      Demo catalogue and estimated delivery. This does not place a
+                      real order.
+                    </p>
                   </div>
-                  <div>
-                    <dt>Quantity</dt>
-                    <dd>{active.proposal.quantity}</dd>
+                )}
+                {active.status === "failed" && active.proposal && (
+                  <div className="alert error">
+                    Order outcome uncertain. Check the supplier and reconcile this
+                    request before attempting another purchase. Retrying is
+                    disabled.
                   </div>
-                  <div>
-                    <dt>Delivery</dt>
-                    <dd>{active.proposal.product.delivery_estimate}</dd>
-                  </div>
-                  <div className="total">
-                    <dt>Total</dt>
-                    <dd>{money(active.proposal.total_nok)}</dd>
-                  </div>
-                </dl>
-                {active.status === "awaiting_approval" && (
+                )}
+                {active.status === "ordered" && (
                   <button
                     className="primary full"
                     disabled={busy}
                     onClick={() =>
                       void perform(async () => {
                         await api<OfficeRequest>(
-                          `/requests/${active.id}/approve`,
-                          {
-                            proposal_fingerprint: proposalFingerprint(
-                              active.proposal!,
-                            ),
-                          },
+                          `/requests/${active.id}/resolve`,
+                          {},
                         );
                         setNotice(
-                          "Simulated order confirmed. No money was spent.",
+                          "Simulated delivery confirmed. A new purchase can now be requested.",
                         );
                       })
                     }
                   >
-                    {busy ? "Processing…" : "Approve simulated order"}
+                    Confirm simulated delivery
                   </button>
                 )}
-                <p className="hint">
-                  Demo catalogue and estimated delivery. This does not place a
-                  real order.
+                {active.assigned_to && (
+                  <p className="fact">
+                    <span>Assigned to</span> {active.assigned_to}
+                  </p>
+                )}
+                {active.status === "maintenance_open" && (
+                  <button
+                    className="primary full"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(async () => {
+                        await api<OfficeRequest>(
+                          `/requests/${active.id}/resolve`,
+                          {},
+                        );
+                        setNotice("Maintenance request marked resolved.");
+                      })
+                    }
+                  >
+                    Mark resolved
+                  </button>
+                )}
+                {active.supplier_reference && (
+                  <p className="fact">
+                    <span>Simulated reference</span>{" "}
+                    <code>{active.supplier_reference}</code>
+                  </p>
+                )}
+                <p className="fact">
+                  <span>Requester</span>{" "}
+                  {active.user_id ?? "Unknown, no speaker identification"}
                 </p>
+                {active.trace && active.trace.length > 0 && (
+                  <details className="log">
+                    <summary>All steps ({active.trace.length})</summary>
+                    <ol>
+                      {active.trace.map((entry, index) => (
+                        <li key={`${entry.at}-${index}`}>
+                          <time dateTime={entry.at}>{stamp(entry.at)}</time>
+                          <span>{entry.detail}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
+              </section>
+            )}
+            <section aria-label="Request queue">
+              <div className="section-head">
+                <h2>Requests</h2>
+                <span className="tally">
+                  {open.length} open · {waitingOnYou} to approve · {handled} handled
+                </span>
               </div>
-            )}
-            {active.status === "failed" && active.proposal && (
-              <div className="alert error">
-                Order outcome uncertain. Check the supplier and reconcile this
-                request before attempting another purchase. Retrying is
-                disabled.
-              </div>
-            )}
-            {active.status === "ordered" && (
-              <button
-                className="primary full"
-                disabled={busy}
-                onClick={() =>
-                  void perform(async () => {
-                    await api<OfficeRequest>(
-                      `/requests/${active.id}/resolve`,
-                      {},
-                    );
-                    setNotice(
-                      "Simulated delivery confirmed. A new purchase can now be requested.",
-                    );
-                  })
-                }
-              >
-                Confirm simulated delivery
-              </button>
-            )}
-            {active.assigned_to && (
-              <p className="fact">
-                <span>Assigned to</span> {active.assigned_to}
-              </p>
-            )}
-            {active.status === "maintenance_open" && (
-              <button
-                className="primary full"
-                disabled={busy}
-                onClick={() =>
-                  void perform(async () => {
-                    await api<OfficeRequest>(
-                      `/requests/${active.id}/resolve`,
-                      {},
-                    );
-                    setNotice("Maintenance request marked resolved.");
-                  })
-                }
-              >
-                Mark resolved
-              </button>
-            )}
-            {active.supplier_reference && (
-              <p className="fact">
-                <span>Simulated reference</span>{" "}
-                <code>{active.supplier_reference}</code>
-              </p>
-            )}
-            <p className="fact">
-              <span>Requester</span>{" "}
-              {active.user_id ?? "Unknown, no speaker identification"}
-            </p>
-            {active.trace && active.trace.length > 0 && (
-              <details className="log">
-                <summary>All steps ({active.trace.length})</summary>
-                <ol>
-                  {active.trace.map((entry, index) => (
-                    <li key={`${entry.at}-${index}`}>
-                      <time dateTime={entry.at}>{stamp(entry.at)}</time>
-                      <span>{entry.detail}</span>
-                    </li>
+              {requests.length === 0 ? (
+                <p className="empty">Nothing yet. Press a station to start one.</p>
+              ) : (
+                <div className="queue">
+                  {requests.map((request) => (
+                    <button
+                      key={request.id}
+                      className={`row ${selected === request.id ? "active" : ""}`}
+                      aria-pressed={selected === request.id}
+                      disabled={busy || listening}
+                      onClick={() => {
+                        setSelected(request.id);
+                        setText("");
+                        setNotice("");
+                      }}
+                    >
+                      <i className={`dot dot-${request.status}`} aria-hidden="true" />
+                      <span className="row-main">
+                        <strong>{request.summary || "New request"}</strong>
+                        <small>
+                          {stations.find((s) => s.id === request.station_id)?.name ??
+                            request.station_id}{" "}
+                          · {stamp(request.created_at)}
+                        </small>
+                      </span>
+                      <span className="row-status">
+                        {statusLabels[request.status] ?? request.status}
+                      </span>
+                    </button>
                   ))}
-                </ol>
-              </details>
-            )}
-          </section>
+                </div>
+              )}
+            </section>
+          </>
         )}
-        <section aria-label="Request queue">
-          <div className="section-head">
-            <h2>Requests</h2>
-            <span className="tally">
-              {open.length} open · {waitingOnYou} to approve · {handled} handled
-            </span>
-          </div>
-          {requests.length === 0 ? (
-            <p className="empty">Nothing yet. Press a station to start one.</p>
-          ) : (
-            <div className="queue">
-              {requests.map((request) => (
-                <button
-                  key={request.id}
-                  className={`row ${selected === request.id ? "active" : ""}`}
-                  aria-pressed={selected === request.id}
-                  disabled={busy || listening}
-                  onClick={() => {
-                    setSelected(request.id);
-                    setText("");
-                    setNotice("");
-                  }}
-                >
-                  <i className={`dot dot-${request.status}`} aria-hidden="true" />
-                  <span className="row-main">
-                    <strong>{request.summary || "New request"}</strong>
-                    <small>
-                      {stations.find((s) => s.id === request.station_id)?.name ??
-                        request.station_id}{" "}
-                      · {stamp(request.created_at)}
-                    </small>
-                  </span>
-                  <span className="row-status">
-                    {statusLabels[request.status] ?? request.status}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
         <footer>
           <span>
             {connectionError

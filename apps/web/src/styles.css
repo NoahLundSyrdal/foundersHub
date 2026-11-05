@@ -12,8 +12,7 @@
   --failed: #ff6b66;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --eye-w: clamp(44px, 11vh, 124px);
-  --eye-h: clamp(80px, 21vh, 232px);
+  --avatar: clamp(110px, 24vh, 220px);
   font-family: "Schibsted Grotesk", system-ui, sans-serif;
   color: var(--ink);
   background: var(--paper);
@@ -95,8 +94,6 @@ code {
   animation: flood 560ms var(--ease-out) both;
 }
 .stage-inner {
-  --look-x: 0px;
-  --look-y: 0px;
   position: relative;
   height: 100%;
   overflow-y: auto;
@@ -120,66 +117,247 @@ code {
   letter-spacing: -0.04em;
 }
 
-/* The eyes are the agent's face. Each mood is one pose. */
-.eyes {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: calc(var(--eye-w) * 0.62);
-  height: var(--eye-h);
-  margin: auto 0 clamp(20px, 4vh, 40px);
-  padding-top: 24px;
-  box-sizing: content-box;
+/* The agent's character. It walks around this open space above the words. */
+.yard {
+  position: relative;
+  flex: 1 0 auto;
+  min-height: calc(var(--avatar) + 96px);
+  margin-bottom: 16px;
 }
-.eye-look {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--eye-w);
-  height: var(--eye-h);
-  transform: translate(var(--look-x), var(--look-y));
-  transition: transform 320ms var(--ease-in-out);
+.avatar-spot {
+  position: absolute;
+  bottom: 0;
+  width: var(--avatar);
+  transform: translateX(-50%);
+  transition-property: left;
+  transition-timing-function: linear;
 }
-.eye {
+.avatar {
   display: block;
-  width: var(--eye-w);
-  height: var(--eye-h);
-  background: var(--ink);
-  border-radius: 999px;
-  transition:
-    width 280ms var(--ease-out),
-    height 280ms var(--ease-out),
-    border-radius 280ms var(--ease-out);
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 24px;
 }
-.mood-idle .eye {
-  height: calc(var(--eye-w) * 0.2);
+.avatar-body {
+  display: block;
+  transform-origin: 50% 100%;
 }
-.mood-idle .eye-look {
-  animation: rest 4.5s ease-in-out infinite;
+.avatar svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  fill: var(--ink);
+  transform-origin: 50% 50%;
+  transition: transform 160ms var(--ease-out);
 }
-.mood-working .eye-look {
-  animation: glance 1.5s var(--ease-in-out) infinite;
+.avatar svg.facing-left {
+  transform: scaleX(-1);
 }
-.mood-working .eye,
-.mood-waiting .eye {
+.avatar .white {
+  fill: var(--paper);
+}
+.antenna,
+.arm,
+.lid,
+.mouth,
+.brow,
+.shades path {
+  fill: none;
+  stroke-linecap: round;
+}
+.antenna {
+  stroke: var(--ink);
+  stroke-width: 4;
+}
+.antenna-tip {
+  fill: var(--ink);
+  transform-origin: 67px 3px;
+}
+.arm {
+  stroke: var(--ink);
+  stroke-width: 9;
+}
+.arm-front {
+  transform-origin: 95px 72px;
+}
+.lid {
+  stroke: var(--paper);
+  stroke-width: 5;
+}
+.mouth {
+  stroke: var(--paper);
+  stroke-width: 3.5;
+}
+.mouth-o {
+  fill: var(--paper);
+}
+.brow {
+  stroke: var(--paper);
+  stroke-width: 5;
+}
+.cheeks circle {
+  fill: #ff8fa3;
+}
+.shades rect {
+  fill: var(--ink);
+  stroke: var(--paper);
+  stroke-width: 2.5;
+}
+.shades path {
+  stroke: var(--paper);
+  stroke-width: 2.5;
+}
+.drop {
+  fill: var(--paper);
+}
+.prop rect,
+.prop circle {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 4;
+}
+.prop path {
+  stroke: var(--ink);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.prop .hole {
+  fill: var(--ink);
+}
+.prop .steam {
+  fill: none;
+  stroke-width: 3;
+}
+.prop-tool {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+.leg {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+}
+.blink {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
   animation: blink 4.8s linear infinite;
 }
-.mood-waiting {
-  --look-x: calc(var(--eye-w) * 0.34);
+.pupils {
+  transition: transform 240ms var(--ease-out);
 }
-.mood-done .eye {
-  height: calc(var(--eye-w) * 0.56);
-  background: transparent;
-  border: calc(var(--eye-w) * 0.2) solid var(--ink);
-  border-bottom: 0;
-  border-radius: 999px 999px 0 0;
+.bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 42%;
+  width: max-content;
+  max-width: min(230px, 56vw);
+  margin: 0;
+  padding: 9px 13px;
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--paper);
+  border-radius: 16px 16px 16px 4px;
+  transform-origin: 0 100%;
+  animation: pop 220ms var(--ease-out);
+  pointer-events: none;
+  z-index: 2;
 }
-.mood-done .eyes {
-  animation: hop 420ms var(--ease-out) 1;
+.mood-done .bubble {
+  bottom: calc(100% + 64px);
 }
-.mood-failed .eye {
-  width: calc(var(--eye-w) * 0.56);
-  height: calc(var(--eye-w) * 0.56);
+.bubble-left {
+  left: auto;
+  right: 42%;
+  border-radius: 16px 16px 4px 16px;
+  transform-origin: 100% 100%;
+}
+.snooze {
+  position: absolute;
+  top: 2px;
+  left: 74%;
+  font-weight: 800;
+  pointer-events: none;
+}
+.snooze i {
+  position: absolute;
+  font-style: normal;
+  opacity: 0;
+  animation: snooze 3.3s ease-out infinite;
+}
+.snooze i:nth-child(2) {
+  animation-delay: 1.1s;
+}
+.snooze i:nth-child(3) {
+  animation-delay: 2.2s;
+}
+.confetti {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  pointer-events: none;
+}
+.confetti i {
+  --angle: calc(var(--n) * 25.7deg);
+  position: absolute;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--ink);
+  opacity: 0;
+  animation: burst 900ms var(--ease-out) 120ms 1;
+}
+.confetti i:nth-child(3n) {
+  background: var(--paper);
+}
+.confetti i:nth-child(3n + 1) {
+  background: #ff8fa3;
+}
+
+/* Each mood is one way of moving. */
+.mood-idle .avatar-body {
+  animation: breathe 3.6s ease-in-out infinite;
+}
+.mood-working .avatar-body {
+  animation: bob 520ms ease-in-out infinite;
+}
+.mood-working .pupils,
+.mood-waiting .pupils {
+  transform: translateX(3px);
+}
+.mood-working .antenna-tip {
+  animation: ping 900ms ease-in-out infinite;
+}
+.walking .avatar-body {
+  animation: bob 300ms ease-in-out infinite;
+}
+.walking .leg-a {
+  animation: step 300ms ease-in-out infinite;
+}
+.walking .leg-b {
+  animation: step 300ms ease-in-out infinite reverse;
+}
+.mood-waiting .avatar-body {
+  animation: bounce 1.5s var(--ease-out) infinite;
+}
+.mood-waiting .arm-front {
+  animation: wave 1.1s ease-in-out infinite;
+}
+.mood-done .avatar-body {
+  animation: jump 720ms var(--ease-out) 3;
+}
+.mood-failed .avatar-body {
+  animation: tremble 180ms linear infinite;
+}
+.avatar-body.poked,
+.mood-working .avatar-body.poked,
+.mood-waiting .avatar-body.poked,
+.mood-idle .avatar-body.poked {
+  animation: jump 560ms var(--ease-out) 1;
 }
 
 .stage-meta {
@@ -201,6 +379,11 @@ code {
   text-wrap: balance;
   overflow-wrap: anywhere;
   animation: settle 240ms var(--ease-out);
+}
+.stage-title.long {
+  font-size: clamp(22px, 2.5vw, 38px);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
 }
 .stage-note {
   margin: 12px 0 0;
@@ -634,21 +817,10 @@ footer {
 
 @keyframes flood {
   from {
-    clip-path: circle(0% at 22% 45%);
+    clip-path: circle(0% at 30% 35%);
   }
   to {
-    clip-path: circle(150% at 22% 45%);
-  }
-}
-@keyframes glance {
-  0%,
-  38%,
-  100% {
-    transform: translateX(0);
-  }
-  50%,
-  88% {
-    transform: translateX(calc(var(--eye-w) * 0.5));
+    clip-path: circle(150% at 30% 35%);
   }
 }
 @keyframes blink {
@@ -661,14 +833,100 @@ footer {
     transform: scaleY(0.08);
   }
 }
-@keyframes rest {
+@keyframes breathe {
   50% {
-    transform: translateY(5px);
+    transform: scale(1.03, 0.97);
   }
 }
-@keyframes hop {
+@keyframes bob {
+  50% {
+    transform: translateY(-5px) rotate(1.5deg);
+  }
+}
+@keyframes step {
+  50% {
+    transform: rotate(16deg);
+  }
+  0%,
+  100% {
+    transform: rotate(-16deg);
+  }
+}
+@keyframes bounce {
+  0%,
+  100%,
   40% {
+    transform: none;
+  }
+  18% {
     transform: translateY(-14px);
+  }
+}
+@keyframes wave {
+  50% {
+    transform: rotate(-20deg);
+  }
+}
+@keyframes ping {
+  50% {
+    transform: scale(1.5);
+  }
+}
+@keyframes jump {
+  0%,
+  100% {
+    transform: none;
+  }
+  14% {
+    transform: scale(1.1, 0.88);
+  }
+  48% {
+    transform: translateY(-52px) scale(0.94, 1.08);
+  }
+  86% {
+    transform: scale(1.08, 0.92);
+  }
+}
+@keyframes tremble {
+  25% {
+    transform: translateX(-2px);
+  }
+  75% {
+    transform: translateX(2px);
+  }
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+@keyframes snooze {
+  0% {
+    opacity: 0;
+    font-size: 14px;
+    transform: none;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    font-size: 30px;
+    transform: translate(24px, -52px);
+  }
+}
+@keyframes burst {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--angle)) translateY(0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateY(-120px) rotate(180deg);
   }
 }
 @keyframes nudge {
@@ -686,8 +944,7 @@ footer {
 
 @media (max-width: 960px) {
   :root {
-    --eye-w: 72px;
-    --eye-h: 128px;
+    --avatar: 128px;
   }
   .desk {
     grid-template-columns: minmax(0, 1fr);
@@ -700,14 +957,6 @@ footer {
     height: auto;
     overflow: visible;
     padding: 20px 16px 24px;
-  }
-  /* The work sits below the agent here, so it looks down instead of right. */
-  .mood-waiting {
-    --look-x: 0px;
-    --look-y: 16px;
-  }
-  .eyes {
-    margin: 32px 0 28px;
   }
   .stage-title {
     font-size: clamp(30px, 8vw, 44px);
@@ -763,5 +1012,75 @@ footer {
   *::after {
     animation: none !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Views and history */
+.views {
+  display: flex;
+  gap: 4px;
+  margin-bottom: -12px;
+}
+.views button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  transition: background 140ms ease;
+}
+.views button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.history-day h3 {
+  margin: 18px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.history-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 10px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  transition: background 140ms ease;
+}
+.history-row time {
+  flex: none;
+  min-width: 58px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.history-row .dot {
+  align-self: center;
+}
+.history-main {
+  flex: 1;
+  min-width: 0;
+}
+.history-main strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.history-main small {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+@media (hover: hover) {
+  .history-row:hover,
+  .views button[aria-pressed="false"]:hover {
+    background: var(--tint);
   }
 }
