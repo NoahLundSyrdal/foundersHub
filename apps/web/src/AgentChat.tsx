@@ -55,11 +55,12 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
   const ordered = [...requests].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const visible = ordered.filter((r, index) => isOpen(r) || index >= ordered.length - VISIBLE_REQUESTS).slice(-VISIBLE_REQUESTS);
   const latest = ordered.at(-1);
-  // A reply continues the latest request only when the agent is waiting for one.
+  // Continue informational conversations while actionable proposals remain immutable.
   const waiting =
     latest &&
     latest.id !== newTopic &&
-    ["awaiting_input", "needs_clarification"].includes(latest.status) &&
+    (["awaiting_input", "needs_clarification"].includes(latest.status) ||
+      (latest.status === "resolved" && !latest.proposal && !latest.grocery?.proposal && !latest.supplier_reference && !latest.assigned_to)) &&
     isRecentChat(latest)
       ? latest
       : undefined;
@@ -99,9 +100,9 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
     setText("");
     setSending(message);
     chosen.current = false;
-    // The backend keeps one prompt per request, so an answer carries its question's context.
+    // The backend retains conversation history; send only the new user message.
     const sent = waiting
-      ? await onReply(waiting, waiting.original_text ? `${waiting.original_text} ${message}`.slice(0, 2000) : message)
+      ? await onReply(waiting, message)
       : await onSend(message, where);
     setSending("");
     // Nothing reached the server, so give the words back instead of making them retype it.
@@ -112,7 +113,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
     setSpeechError("");
     const instance = new SpeechRecognition();
     recognition.current = instance;
-    instance.lang = "en-US";
+    instance.lang = "nb-NO";
     instance.continuous = false;
     instance.interimResults = false;
     instance.onresult = (event) => change(event.results[0][0].transcript);
@@ -134,7 +135,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
         {opened ? "Close chat" : needsReply ? "Open chat · waiting for you" : "Open chat"}
       </button>
       <div className="chat-thread" ref={thread} aria-live="polite">
-        {visible.length === 0 && !sendingShown && <p className="chat-empty">Tell me what’s missing or broken.</p>}
+        {visible.length === 0 && !sendingShown && <p className="chat-empty">Ask about orders, something broken, rooms or air quality.</p>}
         {visible.map((request) => (
           <ChatTurn key={request.id} request={request} stationName={stationName(request.station_id)} busy={busy} onApprove={onApprove} onReject={onReject} onRequote={onRequote} onOpenTicket={onOpenTicket} />
         ))}
@@ -182,7 +183,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
           rows={2}
           value={text}
           maxLength={2000}
-          placeholder={waiting ? "Type your answer" : "We’re out of coffee"}
+          placeholder="Ask the office assistant"
           onChange={(event) => change(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
