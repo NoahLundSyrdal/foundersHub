@@ -289,18 +289,11 @@ def main() -> int:
     p.add_argument("--api", default="http://127.0.0.1:3001")
     p.add_argument("--air", action="store_true", help="Answer air/temperature/CO2 questions even without --station")
     p.add_argument("--speak", action="store_true", help="Read air-quality answers aloud (macOS say)")
-    p.add_argument("--identify", action="store_true",
-                   help="Show who is speaking (enroll first: python speaker_id.py enroll NAME). Informational only")
     args = p.parse_args()
 
     t0 = time.monotonic()
     stt = SpeechToText(args.model, args.language, args.provider)
     print(f"STT provider: {stt.provider} (ready in {time.monotonic() - t0:.1f}s)", file=sys.stderr)
-    sid = None
-    if args.identify:
-        from speaker_id import SpeakerID
-        sid = SpeakerID()
-        print(f"Speaker ID: {len(sid.people)} enrolled ({', '.join(sid.people) or 'none'})", file=sys.stderr)
 
     if args.file:
         print(stt.transcribe(args.file))
@@ -317,10 +310,6 @@ def main() -> int:
         text = stt.transcribe(audio)
         print(f"📝 {text or '(nothing heard)'}   [{len(audio) / SAMPLE_RATE:.1f}s audio, "
               f"transcribed in {time.monotonic() - t1:.1f}s]")
-        if sid and text:
-            who = sid.identify(audio)
-            print(f"👤 {who.name or 'unknown speaker'} (score {who.score:.2f}"
-                  + (f", closest {who.best}" if not who.name and who.best else "") + ")")
         if text and is_air_question(text) and (args.station or args.air):
             try:
                 aq = air_quality(args.api)
