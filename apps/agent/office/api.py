@@ -5,6 +5,8 @@ import asyncio
 import binascii
 import json
 import math
+import logging
+import os
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException
@@ -13,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import facility_api, oda_food, oda_api, work_api
+from office import order_confirmations, whatsapp_delivery
 from office.facility_rules import FacilityReading
 
 
@@ -54,24 +57,41 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     mutation_lock = asyncio.Lock()
     facilities = facility_api.FacilityService(conn, mutation_lock)
     work = work_api.WorkRuntime(conn, mutation_lock)
+    approvals = delivery = None
+    if os.getenv("OFFICE_ORDER_PUBLIC_URL") and os.getenv("OFFICE_ORDER_WHATSAPP_TO"):
+        delivery = whatsapp_delivery.WhatsAppDelivery(conn, mutation_lock,
+            token_path=os.getenv("OFFICE_WHATSAPP_BRIDGE_TOKEN_PATH", str(config.ROOT / ".data/whatsapp/bridge-token")))
+        approvals = order_confirmations.OrderConfirmations(conn, mutation_lock, delivery,
+            recipient=os.environ["OFFICE_ORDER_WHATSAPP_TO"], public_base_url=os.environ["OFFICE_ORDER_PUBLIC_URL"])
+        delivery.validate_job = approvals.validate_job
 
     @asynccontextmanager
     async def lifespan(app):
+        for logger_name in ("uvicorn.access", "uvicorn.error", "httpx"):
+            logger = logging.getLogger(logger_name)
+            if not any(isinstance(f, order_confirmations.ConfirmationTokenFilter) for f in logger.filters):
+                logger.addFilter(order_confirmations.ConfirmationTokenFilter())
         async with mutation_lock:
             await facilities.tick()
             work.tick()
         monitor = asyncio.create_task(facilities.watch())
         work_monitor = asyncio.create_task(work.watch())
+        approval_monitors = [asyncio.create_task(approvals.watch()), asyncio.create_task(delivery.watch())] if approvals else []
         try:
             yield
         finally:
             oda_food.release(conn)
             monitor.cancel()
             work_monitor.cancel()
+            for pending in approval_monitors:
+                pending.cancel()
             with suppress(asyncio.CancelledError):
                 await monitor
             with suppress(asyncio.CancelledError):
                 await work_monitor
+            for pending in approval_monitors:
+                with suppress(asyncio.CancelledError):
+                    await pending
 
     app = FastAPI(title="Office agent", lifespan=lifespan)
     app.state.conn = conn
@@ -79,10 +99,14 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.state.facilities = facilities
     app.state.oda_food = groceries
     app.state.work = work
+    app.state.order_confirmations = approvals
     app.include_router(requests_api.router(conn))
     app.include_router(facility_api.router(facilities))
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
+    if approvals:
+        app.include_router(whatsapp_delivery.router(delivery))
+        app.include_router(order_confirmations.router(approvals))
 
     def board_or_404(board_id: str) -> config.Board:
         if board_id not in config.BOARDS:
@@ -96,7 +120,8 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     @app.get("/api/health")
     async def health():
         return {"ok": True, "model": config.MODEL, "orders": "simulated", "agent_provider": config.MODEL, "supplier_provider": "mock", "simulation": True,
-                "brain": "notion snapshot" if brain.source() == brain.SNAPSHOT else "local copy (config/brain)", "integrations": integrations.status()}
+                "brain": "notion snapshot" if brain.source() == brain.SNAPSHOT else "local copy (config/brain)", "integrations": integrations.status(),
+                "approval_channel": "whatsapp" if approvals else "dashboard"}
 
     @app.get("/api/brain")
     async def get_brain():
