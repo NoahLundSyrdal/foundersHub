@@ -6,8 +6,8 @@ from office import brain, bus, config, db
 from office_procurement.config import configuration
 from office_procurement.planning import plan_purchase, needs_approval, fixture_offers, offer_total
 from office_procurement.serialization import proposal_fingerprint, epoch
-from office_procurement.models import WorkerInput
-from office_procurement.worker import run_worker
+from office_procurement.models import WorkerInput, WorkerOutput, Interpretation
+from office_procurement.worker import run_worker, validate_decision, Context, search_item
 
 
 class ProcurementConflict(Exception):
@@ -84,7 +84,7 @@ def open_requests(conn, exclude_id):
     return requests
 
 
-async def prepare_need(conn, task_id: str, text: str | None):
+async def prepare_need(conn, task_id: str, text: str | None, *, decision: Interpretation | None = None):
     ensure_schema(conn)
     old = get_context(conn, task_id)
     if text is None:
@@ -105,17 +105,28 @@ async def prepare_need(conn, task_id: str, text: str | None):
     from office import oda_food
     if provider == "anthropic" and not config.MODEL.startswith("anthropic:"):
         raise ProcurementConflict("Procurement supports mock or the configured Anthropic provider.")
-    result = await run_worker(WorkerInput.model_validate({
+    request = WorkerInput.model_validate({
         "text": text, "station": station,
         "catalogue": [p for p in products if p["station_id"] == station["id"] and p["id"] in station["item_ids"]],
         "policy": {k: rules[k] for k in ("max_order_nok", "require_approval", "preferences")},
         "open_requests": [{k: r[k] for k in ("id", "station_id", "item_id", "status")} for r in requests[:100]],
         "provider": provider, "model": config.MODEL.split(":", 1)[1] if provider == "anthropic" else None,
         "grocery_enabled": oda_food.enabled(),
-    }))
+    })
+    direct = decision is not None
+    if decision is None:
+        result = await run_worker(request)
+    else:
+        decision = validate_decision(request, decision)
+        context = Context(request)
+        if decision.item_id:
+            await search_item(context, decision.item_id)
+        result = WorkerOutput(interpretation=decision, research=context.research, progress=context.progress)
     decision = result.interpretation.model_dump()
     value = {"interpretation": decision, "assessment": decision["assessment"], "research": [r.model_dump(mode="json") for r in result.research],
              "proposal": None, "approval_required": True, "prepared_at": db.now()}
+    if direct:
+        value["source"] = "validated-need"
     if decision["intent"] == "grocery":
         value = await oda_food.service(conn).prepare(task_id, value)
     elif decision["intent"] == "purchase" or (decision["intent"] == "maintenance" and decision["item_id"]):

@@ -21,7 +21,7 @@ The API reload command allows two seconds for graceful shutdown so open event st
 
 Open **http://localhost:5173**. The backend listens on **http://127.0.0.1:3001**. The web app proxies `/api` to the backend. This foundation is intended for local development, without production authentication; keep it bound to loopback.
 
-No API key is needed with `OFFICE_MODEL=mock`. For live Pydantic AI, set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY` in the ignored `.env` file. Supplier execution remains simulated. Optional `TAVILY_API_KEY` enables supplier and FINN discovery.
+Set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY` in the ignored `.env` file. Live questions go directly to Claude, which chooses tools for office status, sensors/history, rooms and validated supply/repair requests. Norwegian input and informational follow-ups are supported. A live provider failure never switches to scripted interpretation. `OFFICE_MODEL=mock` is an explicit offline test option. Supplier execution remains simulated; Oda checkout/payment stays on Oda. Optional `TAVILY_API_KEY` enables supplier and FINN discovery.
 
 The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity assessment, exact approval and critical dashboard alerts. See [the procurement guide](docs/procurement.md) for endpoints and configuration. `AGENT_DATABASE_PATH` defaults to `.data/agent.sqlite`.
 

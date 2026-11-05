@@ -13,6 +13,7 @@
     "dev": "concurrently -k -n api,web \"npm run dev:agent\" \"npm run dev -w @office/web\"",
     "dev:server": "npm run dev:agent",
     "dev:agent": "cd apps/agent && uv run uvicorn office.api:create_app --factory --reload --host 127.0.0.1 --port 3001 --timeout-graceful-shutdown 2",
+    "demo:room-history": "cd apps/agent && uv run python -m office.room_demo",
     "dev:web": "npm run dev -w @office/web",
     "check": "npm run check --workspaces --if-present",
     "build": "npm run build -w @office/web",
