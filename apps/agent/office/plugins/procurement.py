@@ -25,8 +25,7 @@ async def search_catalogue(ctx: RunContext[Deps], query: str) -> list[dict]:
             (not words or any(w in f"{p['id']} {p['name']}".lower() for w in words))]
 
 
-@toolset.tool
-async def place_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> str:
+def execute_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> str:
     """Execute the exact prepared quote in simulation; human review follows office and severity policy."""
     conn, task_id = ctx.deps.db, ctx.deps.task_id
     workflow.ensure_schema(conn)
@@ -76,3 +75,9 @@ async def place_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1)
         conn.execute("UPDATE procurement_attempts SET state='uncertain' WHERE task_id=?", (task_id,))
         return "Execution outcome uncertain. Do not retry; reconcile the persisted execution identifier."
     return f"Ordered (SIMULATED) {quantity} × {proposal['product']['name']} for {proposal['total_nok']:g} NOK, ref {ref}, delivery {proposal['product']['delivery_estimate']}."
+
+
+@toolset.tool
+async def place_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> str:
+    """Execute the exact prepared quote in simulation after server policy and approval checks."""
+    return execute_order(ctx, product_id, quantity)

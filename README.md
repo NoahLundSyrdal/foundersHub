@@ -25,6 +25,8 @@ The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity 
 
 See [deterministic facility rules and hardware acceptance steps](docs/facility-rules.md) for backend sensor thresholds, controlled replenishment, local inspection tasks and station sound commands.
 
+The **Work** view adds durable outcomes, owned steps, completion evidence, recurring routines and a local follow-up inbox. Existing orders and maintenance tickets appear there without replacing their approval or execution rules. See [workflow setup and API](docs/office-workflows.md) for the receipt/inventory lifecycle, schedule behavior and isolated-worktree development ports.
+
 ## Try the flow
 
 1. Choose the kitchen station and press its simulated button.

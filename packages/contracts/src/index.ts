@@ -273,3 +273,4 @@ export const StationActionClaimSchema = z.strictObject({ consumer_id: z.string()
 export const StationActionAcknowledgementSchema = z.strictObject({
   status: z.enum(["delivered", "failed"]), detail: z.string().max(500).default(""),
 });
+export * from "./work.js";

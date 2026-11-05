@@ -1,0 +1,77 @@
+.work-queue { min-width: 0; }
+.wq-heading, .wq-detail-title, .wq-step-title, .wq-notice { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.wq-heading h2 { margin: 0; }
+.wq-heading p, .wq-step-meta, .wq-detail-title > span:last-child { color: var(--ink-soft); font-size: 12px; }
+.wq-heading p { margin: 8px 0 0; }
+.wq-heading > button { flex-shrink: 0; }
+.wq-filters, .wq-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wq-filters { margin: 22px 0 18px; }
+.wq-filters button { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font-size: 12px; }
+.wq-filters button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.wq-layout { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(0, 1.3fr); gap: 20px; align-items: start; }
+.wq-list { display: grid; gap: 8px; min-width: 0; }
+.wq-row { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); padding: 14px; text-align: left; overflow-wrap: anywhere; }
+.wq-row.selected { border-color: var(--ink); background: var(--tint); }
+.wq-row strong { font-size: 13px; line-height: 1.5; }
+.wq-row > span:not(.wq-status), .wq-row small { color: var(--ink-soft); font-size: 11px; line-height: 1.5; }
+.wq-status { display: inline-block; width: fit-content; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; background: var(--tint); border-radius: 4px; padding: 4px 6px; white-space: nowrap; }
+.wq-selected { background: var(--idle); }
+.wq-awaiting_approval, .wq-waiting { background: #fff4c6; }
+.wq-blocked, .wq-failed, .wq-uncertain { background: #ffe4e1; }
+.wq-active { background: #ffeadb; }
+.wq-completed { background: #def7e8; }
+.wq-detail { min-width: 0; border: 1px solid var(--line); border-radius: 9px; padding: 18px; overflow-wrap: anywhere; }
+.wq-detail h3 { margin: 18px 0 8px; font-size: 18px; }
+.wq-outcome { font-size: 13px; line-height: 1.6; }
+.wq-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0; }
+.wq-facts div { min-width: 0; }
+.wq-facts dt { font-size: 10px; color: var(--ink-soft); margin-bottom: 4px; }
+.wq-facts dd { font-size: 12px; margin: 0; }
+.wq-waiting, .wq-linked { padding: 12px; border-radius: 6px; font-size: 12px; line-height: 1.6; }
+.wq-linked { background: var(--tint); margin: 16px 0; }
+.wq-linked p { margin-top: 0; }
+.wq-manage, .wq-history { border-top: 1px solid var(--line); padding: 14px 0; font-size: 12px; }
+.work-queue summary { cursor: pointer; font-size: 12px; }
+.wq-detail h4 { font-size: 13px; margin: 18px 0 12px; }
+.wq-steps, .wq-history ol, .wq-evidence { padding: 0; list-style: none; }
+.wq-steps { display: grid; gap: 14px; }
+.wq-step { border: 1px solid var(--line); border-radius: 7px; padding: 14px; min-width: 0; }
+.wq-step-title h5 { margin: 0; font-size: 13px; line-height: 1.5; }
+.wq-step-meta { margin: 6px 0 12px; }
+.wq-approval { margin: 12px 0; padding: 12px; background: var(--tint); border-radius: 5px; font-size: 12px; }
+.wq-approval pre { max-height: 250px; overflow: auto; padding: 8px; background: var(--paper); font-size: 10px; white-space: pre-wrap; word-break: break-word; }
+.wq-execution { font-size: 12px; line-height: 1.6; }
+.wq-evidence { display: grid; gap: 8px; }
+.wq-evidence li { display: grid; gap: 4px; padding: 10px; border-left: 2px solid var(--done); background: var(--tint); font-size: 12px; line-height: 1.5; }
+.wq-evidence small { font-size: 10px; color: var(--ink-soft); }
+.wq-form { display: grid; gap: 12px; margin: 16px 0; }
+.wq-form label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 600; min-width: 0; }
+.wq-form input, .wq-form select, .wq-form textarea { width: 100%; min-width: 0; font: inherit; font-size: 12px; font-weight: 400; padding: 9px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); color: var(--ink); }
+.wq-form textarea { resize: vertical; min-height: 72px; }
+.wq-form > button { justify-self: start; }
+.wq-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.wq-create { padding: 18px; background: var(--tint); border-radius: 8px; margin-top: 20px; }
+.wq-create h3 { font-size: 14px; margin: 0; }
+.wq-create p { margin: 0; }
+.wq-step > .wq-actions { margin-top: 14px; }
+.wq-actions button { font-size: 11px; }
+.wq-inbox { border: 1px solid var(--line); padding: 14px; border-radius: 8px; margin-top: 20px; }
+.wq-notice { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; font-size: 12px; }
+.wq-notice p { margin: 6px 0; line-height: 1.6; }
+.wq-notice small { font-size: 10px; color: var(--ink-soft); }
+.wq-history li { display: grid; gap: 5px; padding: 10px 0; border-bottom: 1px solid var(--line); line-height: 1.5; }
+.wq-history time { font-size: 10px; color: var(--ink-soft); }
+.wq-close { border-top: 1px solid var(--line); padding-top: 12px; font-size: 12px; line-height: 1.6; }
+.wq-routines { border: 1px solid var(--line); padding: 14px; border-radius: 8px; margin-top: 20px; }
+.wq-routine-list { display: grid; gap: 10px; margin: 14px 0; }
+.wq-routine-row { display: flex; justify-content: space-between; align-items: start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.wq-routine-row > div { min-width: 0; overflow-wrap: anywhere; }
+.wq-routine-row p { margin: 5px 0; line-height: 1.6; }
+.wq-routine-row small { display: block; color: var(--ink-soft); font-size: 10px; line-height: 1.7; }
+.wq-weekdays { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; border: 1px solid var(--line); border-radius: 5px; padding: 10px; }
+.wq-weekdays legend { font-size: 11px; font-weight: 600; }
+.wq-form .wq-weekdays label { flex-direction: row; align-items: center; gap: 4px; }
+.wq-form .wq-weekdays input { width: auto; }
+.wq-reconcile { margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 5px; }
+@media (max-width: 1150px) { .wq-layout { grid-template-columns: 1fr; } .wq-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .wq-heading { flex-wrap: wrap; } .wq-list, .wq-fields, .wq-facts { grid-template-columns: 1fr; } .wq-notice { flex-wrap: wrap; } .wq-detail { padding: 14px; } }
