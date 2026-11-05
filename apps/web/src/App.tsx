@@ -14,6 +14,7 @@ import { HistoryView } from "./HistoryView";
 import { OfficeTwin } from "./OfficeTwin";
 import { ProcurementAlerts } from "./ProcurementAlerts";
 import { TicketsView } from "./TicketsView";
+import WorkQueue from "./WorkQueue";
 import { OdaConnection, OdaFoodOrder } from "./OdaFoodOrder";
 
 type Health = {
@@ -39,7 +40,7 @@ export function App() {
     [error, setError] = useState(""),
     [connectionError, setConnectionError] = useState(""),
     [streamConnected, setStreamConnected] = useState(false),
-    [view, setView] = useState<"twin" | "tickets" | "history">("twin"),
+    [view, setView] = useState<"twin" | "tickets" | "history" | "work">("twin"),
     [where, setWhere] = useState<Station["id"]>("kitchen"),
     [askCount, setAskCount] = useState(0),
     [openCount, setOpenCount] = useState(0);
@@ -221,6 +222,7 @@ export function App() {
           </div>
         )}
         <nav className="views" aria-label="Views">
+          <button aria-pressed={view === "work"} onClick={() => setView("work")}>Work</button>
           <button aria-pressed={view === "twin"} onClick={() => setView("twin")}>
             Office twin
           </button>
@@ -255,6 +257,7 @@ export function App() {
           }}
           onRequest={openTicket}
         />
+        {view === "work" && <WorkQueue onOpenRequest={openTicket} />}
         {view === "tickets" && (
           <TicketsView
             requests={requests}
