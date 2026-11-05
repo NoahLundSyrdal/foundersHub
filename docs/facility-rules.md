@@ -80,7 +80,7 @@ Run `npm test`, `npm run check`, and `npm run build`. The focused tests cover ev
 
 ## Anders: hardware acceptance
 
-This feature branch is stacked on the Python runtime in PR #4. Check out `NLS/deterministic-facility-backend`, install dependencies, and start an isolated test database:
+This feature branch includes the Python runtime and reviewed shared-connection fixes from PRs #4 and #6, now on main. Check out `NLS/deterministic-facility-backend`, install dependencies, and start an isolated test database:
 
 ```sh
 npm ci

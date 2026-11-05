@@ -57,7 +57,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         async with mutation_lock:
-            facilities.tick()
+            await facilities.tick()
             work.tick()
         monitor = asyncio.create_task(facilities.watch())
         work_monitor = asyncio.create_task(work.watch())
@@ -138,7 +138,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                         "timestamp": body.timestamp or facilities.engine.snapshot()["evaluated_at"],
                         "simulation": body.simulation,
                     })
-                    result = facilities.ingest(reading)
+                    result = await facilities.ingest(reading)
                     # Preserve the native stock sensor response while replacing its
                     # old prompt-based trigger with the same fixed rule dispatcher.
                     if any(t["kind"] == body.kind for t in board.triggers):
@@ -203,7 +203,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                 except ValueError as error:
                     raise HTTPException(409, str(error)) from error
                 if ev.type == "stock_low":
-                    facilities.resume_stock_checks()
+                    await facilities.resume_stock_checks()
                 return legacy.response(conn, seen["task_id"], True)
             if ev.type not in {"button_pressed", "speech_transcript", "stock_low"}:
                 raise HTTPException(400, "Unsupported event type")
@@ -243,7 +243,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                 bus.publish("board.listen", {"board_id":board.id})
                 bus.publish("requests.updated", {"request_id":task_id}, source=conn)
             elif ev.type == "stock_low":
-                facilities.prepare_stock_check(task_id, board.id, ev.payload["item_id"], ev.payload.get("simulation", True))
+                await facilities.prepare_stock_check(task_id, board.id, ev.payload["item_id"], ev.payload.get("simulation", True))
             else:
                 await agent.run(conn,task_id,text)
             result = legacy.response(conn,task_id)

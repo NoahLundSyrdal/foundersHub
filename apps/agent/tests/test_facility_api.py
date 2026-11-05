@@ -225,10 +225,10 @@ def test_interrupted_stock_registration_resumes_in_backend_tick(facility):
              "timestamp": clock[0].isoformat(), "payload": {"item_id": "coffee"}}
     conn.execute("INSERT INTO device_events VALUES(?,?,?)", (event["event_id"], task_id, "{}"))
     service.remember_device_input(event["event_id"], event)
-    service.tick()
+    assert client.get("/api/facility").status_code == 200
     assert db.row(conn, "SELECT status FROM tasks WHERE id=?", task_id)["status"] == "awaiting_approval"
     assert procurement_workflow.get_context(conn, task_id)["proposal"]["quantity"] == 1
-    service.tick()
+    assert client.get("/api/facility").status_code == 200
     assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 1
 
 
@@ -246,7 +246,7 @@ def test_interrupted_supplier_attempt_is_never_automatically_reexecuted(facility
     def forbidden(*args, **kwargs):
         raise AssertionError("An uncertain supplier attempt must not execute again")
     monkeypatch.setattr(procurement, "place_order", forbidden)
-    client.app.state.facilities.tick()
+    assert client.get("/api/facility").status_code == 200
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", request["id"])
     assert task["status"] == "failed" and "reconcile" in task["reply"]
     assert client.get("/api/state").json()["orders"] == []
@@ -281,3 +281,36 @@ def test_observed_firmware_quantity_aliases(facility, key, value, metric):
     response = client.post("/api/telemetry", json={"key": key, "value": value, "timestamp": clock[0].isoformat(), "event_id": uuid4().hex})
     assert response.status_code == 200, response.text
     assert response.json()["metric"] == metric
+
+
+def test_registered_stock_check_survives_app_restart_without_a_model(tmp_path, monkeypatch):
+    from office import db
+    from office.facility_api import FacilityService
+    import asyncio
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("Registered deterministic checks must resume without a model")
+    monkeypatch.setattr(procurement_workflow, "run_worker", forbidden)
+    monkeypatch.setattr(agent.office_agent, "run", forbidden)
+    monkeypatch.setitem(config.OFFICE, "require_approval", True)
+    path = str(tmp_path / "registered-stock.sqlite")
+    conn = db.connect(path)
+    procurement_workflow.ensure_schema(conn)
+    service = FacilityService(conn, asyncio.Lock())
+    task_id = agent.start_task(conn, "kitchen", "sensor", "Stock check: coffee")
+    event = {"event_id": "registered-before-process-restart", "station_id": "kitchen", "type": "stock_low",
+             "timestamp": db.now(), "payload": {"item_id": "coffee"}}
+    conn.execute("INSERT INTO device_events VALUES(?,?,?)", (event["event_id"], task_id, "{}"))
+    service.remember_device_input(event["event_id"], event)
+    conn.close()
+
+    app = create_app(path)
+    with TestClient(app) as client:
+        task = next(t for t in client.get("/api/state").json()["tasks"] if t["id"] == task_id)
+        assert task["status"] == "awaiting_approval"
+        assert task["proposal"]["product"]["id"] == "coffee"
+        assert task["proposal"]["quantity"] == 1
+        assert client.get("/api/state").json()["orders"] == []
+        assert len(client.get("/api/state").json()["tasks"]) == 1
+        assert client.post("/api/device-events", json=event).json()["duplicate"] is True
+        assert len(client.get("/api/state").json()["tasks"]) == 1
