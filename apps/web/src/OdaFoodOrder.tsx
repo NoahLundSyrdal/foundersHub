@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { proposalFingerprint, type EventResponse, type OfficeRequest } from "@office/contracts";
 import { api } from "./api";
 import "./oda-food.css";
 
 const money = (amount: number) => new Intl.NumberFormat("en-NO", { style: "currency", currency: "NOK" }).format(amount);
+export const ApprovalChannelContext = createContext<"dashboard" | "whatsapp">("dashboard");
 
 export function OdaConnection() {
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -26,6 +27,7 @@ export function OdaFoodOrder({ request, busy, perform }: {
   request: OfficeRequest; busy: boolean; perform?: (action: () => Promise<void>) => Promise<unknown>;
 }) {
   const [loading, setLoading] = useState(false);
+  const approvalChannel = useContext(ApprovalChannelContext);
   const [error, setError] = useState("");
   const run = async (action: () => Promise<void>) => {
     if (perform) return perform(action);
@@ -60,7 +62,8 @@ export function OdaFoodOrder({ request, busy, perform }: {
       <div className="oda-subtotal"><strong>Products subtotal</strong><strong>{money(proposal.subtotal_nok)}</strong></div>
       <p className="oda-note">Delivery fees and delivery time are confirmed on Oda. This basket has not been ordered or paid for.</p>
       <p>{proposal.reason}</p>
-      {grocery.state === "awaiting_approval" && <>
+      {grocery.state === "awaiting_approval" && approvalChannel === "whatsapp" && <p>Du får en melding på WhatsApp for å bekrefte dette nøyaktige tilbudet.</p>}
+      {grocery.state === "awaiting_approval" && approvalChannel !== "whatsapp" && <>
         <small>Price snapshot expires {new Date(proposal.expires_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</small>
         <button className="primary" disabled={busy} onClick={approve}>Add these products to Oda cart</button>
         <button className="secondary" disabled={busy} onClick={() => void run(async () => {

@@ -23,6 +23,8 @@ No API key is needed with `OFFICE_MODEL=mock`. For live Pydantic AI, set `OFFICE
 
 The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity assessment, exact approval and critical dashboard alerts. See [the procurement guide](docs/procurement.md) for endpoints and configuration. `AGENT_DATABASE_PATH` defaults to `.data/agent.sqlite`.
 
+For one WhatsApp message per exact order proposal and an invite-protected team demo, see [WhatsApp approval and team access](docs/order-confirmation.md). This uses the existing board input API and does not require changing board firmware.
+
 See [deterministic facility rules and hardware acceptance steps](docs/facility-rules.md) for backend sensor thresholds, controlled replenishment, local inspection tasks and station sound commands.
 
 The **Work** view adds durable outcomes, owned steps, completion evidence, recurring routines and a local follow-up inbox. Existing orders and maintenance tickets appear there without replacing their approval or execution rules. See [workflow setup and API](docs/office-workflows.md) for the receipt/inventory lifecycle, schedule behavior and isolated-worktree development ports.

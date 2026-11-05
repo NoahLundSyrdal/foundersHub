@@ -1,4 +1,6 @@
 import type { OfficeRequest } from "@office/contracts";
+import { useContext } from "react";
+import { ApprovalChannelContext } from "./OdaFoodOrder";
 import { isQuoteExpired } from "./format";
 
 export type ProposalHandlers = {
@@ -8,6 +10,8 @@ export type ProposalHandlers = {
 };
 /** The same choices everywhere a proposal is shown, so one can never get stuck waiting. */
 export function ProposalActions({ request, busy, onApprove, onReject, onRequote }: ProposalHandlers & { request: OfficeRequest; busy: boolean }) {
+  const channel = useContext(ApprovalChannelContext);
+  if (channel === "whatsapp") return <p>Du får en melding på WhatsApp for å bekrefte dette nøyaktige tilbudet.</p>;
   const expired = isQuoteExpired(request);
   return (
     <div className="proposal-actions">
