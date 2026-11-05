@@ -8,13 +8,15 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "python-dotenv>=1.0",
+    "httpx>=0.28",  # speaker ID client (apps/voiceid)
     "office-procurement",
     "pydantic-ai-harness[notion]>=0.66.0",
+    "agentmail>=2.0.23,<3",
 ]
 
 [project.optional-dependencies]
-# Speech-to-text + speaker ID. Owner: voice. setuptools<81 is needed by webrtcvad (resemblyzer).
-voice = ["openai>=1.50", "resemblyzer>=0.1.4", "setuptools<81", "soundfile>=0.12", "numpy"]
+# Speech-to-text. Owner: voice. Speaker ID runs in apps/voiceid (Modal) and needs no extra here.
+voice = ["openai>=1.50"]
 
 [dependency-groups]
 dev = ["pytest>=8", "anyio>=4", "httpx>=0.28"]

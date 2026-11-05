@@ -2,7 +2,7 @@
 import json
 import time
 
-from office import brain, bus, config, db
+from office import brain, bus, config, db, speaker
 from office_procurement.config import configuration
 from office_procurement.planning import plan_purchase, needs_approval, fixture_offers, offer_total
 from office_procurement.serialization import proposal_fingerprint, epoch
@@ -49,6 +49,7 @@ def store_context(conn, task_id, value):
 
 
 def enrich_task(conn, task):
+    task = task | {"speaker": speaker.load(conn, task["id"], task.get("person")).annotation()}
     value = get_context(conn, task["id"])
     return task | {key: value.get(key) for key in ("assessment", "proposal", "research", "approval_required", "approval", "grocery")} if value else task
 
@@ -172,11 +173,13 @@ def validate_quote(conn, task_id):
         raise ProcurementConflict("Quote is invalid or changed; create a new request.") from error
 
 
-def approval_metadata(value, person_name):
+def approval_metadata(value, person_name, requester: "speaker.Speaker | None" = None):
     p = value["proposal"]
     route = value.get("approval") or approval_route(p, current_configuration()[3])
     return {"summary": f"{p['quantity']} × {p['product']['name']} = {p['total_nok']:g} NOK (simulated)",
             "total_nok": p["total_nok"], "requested_by": person_name, "proposal": p,
+            # Who asked and on what evidence, for the human approver. Never changes whether approval is needed.
+            "requester": (requester or speaker.Speaker.declared(person_name)).annotation(),
             "proposal_fingerprint": proposal_fingerprint(p), "assessment": value["assessment"],
             "approval_type": route["type"], "approver": route["approver"], "approval_reason": route["reason"]}
 
@@ -221,11 +224,13 @@ def requote_task(conn, task_id, fingerprint):
     pending = json.loads(task["pending"])
     for call in pending:
         if call["tool"] == "place_order":
-            call["details"] = approval_metadata(value, task["person"])
+            call["details"] = approval_metadata(value, task["person"], speaker.load(conn, task_id, task["person"]))
     store_context(conn, task_id, value)
     conn.execute("UPDATE tasks SET pending=?,reply=?,updated_at=? WHERE id=?",
                  (json.dumps(pending), "Fresh quote ready for review (simulated).", db.now(), task_id))
     bus.publish("requests.updated", {"request_id": task_id})
+    from office import approval_email
+    approval_email.notify(conn, task_id)  # new fingerprint: the approver may get a fresh email
     return enrich_task(conn, db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)))
 
 

@@ -28,6 +28,15 @@ CREATE TABLE IF NOT EXISTS tickets (
 CREATE TABLE IF NOT EXISTS sensor_readings (board_id TEXT, kind TEXT, value REAL, at TEXT);
 CREATE TABLE IF NOT EXISTS board_commands (board_id TEXT PRIMARY KEY, text TEXT, color TEXT, at TEXT);
 CREATE TABLE IF NOT EXISTS device_events (event_id TEXT PRIMARY KEY, task_id TEXT, response TEXT);
+-- office/speaker.py: who spoke and on what evidence (JSON). Informational; never authority.
+CREATE TABLE IF NOT EXISTS task_speakers (task_id TEXT PRIMARY KEY, speaker TEXT NOT NULL);
+-- office/approval_email.py: at most one approval-request email per (task, proposal). Notification only.
+CREATE TABLE IF NOT EXISTS approval_emails (
+  task_id TEXT NOT NULL, fingerprint TEXT NOT NULL,  -- sha256 of the exact proposal fingerprint(s) emailed
+  approver TEXT NOT NULL, state TEXT NOT NULL,       -- skipped | sending | sent | failed | uncertain
+  detail TEXT, message_id TEXT, idempotency_key TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (task_id, fingerprint)
+);
 """
 
 

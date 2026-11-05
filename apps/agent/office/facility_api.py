@@ -12,7 +12,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from office import bus, config, db, procurement_workflow as workflow
+from office import approval_email, bus, config, db, procurement_workflow as workflow
 from office.deps import Deps
 from office.facility_rules import FacilityEngine, FacilityReading, FacilityRule
 from office.facility_outputs import StationActions
@@ -51,6 +51,8 @@ def _task_update(conn, task_id, status, reply, pending=None):
     db.set_command(conn, task["board_id"], reply, "red" if status == "failed" else "amber" if status == "awaiting_approval" else "green")
     bus.publish("requests.updated", {"request_id": task_id}, source=conn)
     bus.publish("state.changed", {}, source=conn)
+    if status == "awaiting_approval":
+        approval_email.notify(conn, task_id)
     return workflow.enrich_task(conn, db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)))
 
 

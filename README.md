@@ -117,7 +117,7 @@ Runtime database files live in ignored `.data/` by default. Stop the backend bef
 
 The application uses a Python FastAPI/Pydantic AI backend with one SQLite owner and a React/TypeScript frontend. Three.js renders the office twin. The live Anthropic path has bounded model/tool usage; deterministic mock interpretation remains available without credentials.
 
-The important technical boundaries are validated decisions, exact proposal approval, persisted execution attempts, and idempotent input. Optional supplier/FINN discovery is read-only. Live stock telemetry, speaker identity, supplier checkout and contractor booking remain separate integrations. See [the architecture rationale](docs/architecture.md#technology-rationale).
+The important technical boundaries are validated decisions, exact proposal approval, persisted execution attempts, and idempotent input. Optional supplier/FINN discovery is read-only. Live stock telemetry, supplier checkout and contractor booking remain separate integrations. Speaker identity ([apps/voiceid](apps/voiceid/README.md)) labels voice requests for context and restrictive access control only; it never grants authority. See [the architecture rationale](docs/architecture.md#technology-rationale).
 
 ## What to build next
 
@@ -127,7 +127,7 @@ See [architecture and API contracts](docs/architecture.md), [demo steps](docs/de
 
 ## Company brain on Notion
 
-Notion holds the office's procedures and an **approval routing** table: which person approves which kind of approval. Application code reads the table and attaches the approver to every proposal; the model never chooses who approves. The dashboard shows it above the approve buttons ("For Leo · Above the office cap of 1000 NOK per order").
+Notion holds the office's procedures and an **approval routing** table: which person approves which kind of approval. Application code reads the table and attaches the approver to every proposal; the model never chooses who approves. The dashboard shows it above the approve buttons ("For Noah · Above the office cap of 1000 NOK per order").
 
 | Approval type | When (decided by the server) |
 | --- | --- |
@@ -143,6 +143,14 @@ npm run connect -- notion   # browser sign-in to Notion's hosted MCP; token in i
 ```
 
 Set `NOTION_BRAIN_PAGE_ID` to a page whose child pages hold the procedures and a table with `Approval type | Approver` (same shape as `config/brain/approval-routing.md`, with at least `purchase` and `purchase_over_cap`). `npm run connect -- sync` or `POST /api/brain/sync` re-reads it into `.data/brain/`; a sync without a valid routing table is refused and the previous snapshot stays. `GET /api/brain` shows what is in use. The agent also gets Notion's read-only tools; if Notion is down, a run continues without them. It keeps an office notebook across tasks (Pydantic AI Harness `Memory`, `.data/memory.sqlite`, live mode only).
+
+## Approval emails (AgentMail)
+
+When a request enters **awaiting approval** (a chat or device order, a sensor replenishment, a refreshed quote, an Oda basket), the server emails the approver named in the routing table. For agent runs this is the `ApprovalEmail` capability (`apps/agent/office/approval_email.py`): its `after_run` hook sees the run end with `DeferredToolRequests` and uses the approval metadata the application attached. Facility replenishment, Oda baskets and quote refreshes call the same module's `notify()`. The model has no email tool. The email is a **notification only**: it lists the exact items, total, approval type and reason, who asked and how they were identified (always unverified), the board and the task id, and says whether the order is simulated. Approve or reject on the dashboard; replying to the email does nothing.
+
+At most one email goes out per task and exact proposal (`approval_emails` in SQLite, plus an AgentMail idempotency key). Retries, restarts and repeated approval states do not resend; a refreshed quote can. A send that may have reached AgentMail (timeout, 5xx, restart mid-send) is recorded as `uncertain` and never retried automatically. A failed or skipped email never blocks the request.
+
+Sending is off by default. To enable it with a live model, set in `.env`: `APPROVAL_EMAIL_ENABLED=true`, `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID` (the sending inbox) and `APPROVER_EMAILS=Noah:you@example.com`. Approver addresses are personal data: keep them in `.env`, never in Git. Mock mode and tests never send.
 
 ## Food on Oda
 

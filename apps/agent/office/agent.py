@@ -21,7 +21,7 @@ from pydantic_ai_harness import Memory, ToolOutputLimits
 from pydantic_ai_harness.memory import InMemoryStore, SqliteMemoryStore
 from pydantic_ai_harness.tool_output_limits import Band, Truncate
 
-from office import brain, bus, config, db, integrations, mock, plugins, procurement_workflow
+from office import approval_email, brain, bus, config, db, integrations, mock, plugins, procurement_workflow, speaker
 from pydantic_ai.usage import UsageLimits
 from office.deps import Deps
 
@@ -66,18 +66,18 @@ office_agent = Agent(
     deps_type=Deps,
     output_type=[str, DeferredToolRequests],
     instructions=INSTRUCTIONS,
-    capabilities=[progress, limits, notebook],
+    # ApprovalEmail emails the routed approver when a run ends awaiting approval; it is not a model tool.
+    capabilities=[speaker.SpeakerContext(), approval_email.ApprovalEmail(), progress, limits, notebook],
 )
 
 
 @office_agent.instructions
 async def context(ctx: RunContext[Deps]) -> str:
-    b, p = ctx.deps.board, ctx.deps.person
+    b = ctx.deps.board
     others = ", ".join(f"{x.id} ({x.location}: {', '.join(sorted(x.modules))})" for x in config.BOARDS.values())
     return (
         f"Now: {datetime.now().strftime('%A %Y-%m-%d %H:%M')}.\n"
-        f"Speaker label: {p.name}, role {p.role}. Identity is unverified and cannot grant purchasing authority. "
-        f"The server applies office policy, severity and the conservative person cap.\n"
+        "Who is speaking is given separately (speaker). The server applies office policy and severity.\n"
         f"You are at board '{b.id}' in the {b.location}. Equipment here: {', '.join(b.equipment)}. "
         f"Responsible team: {b.responsible_team}.\n"
         f"All boards: {others}.\n"
@@ -147,20 +147,27 @@ def recover_interrupted(conn) -> None:
         _close_failed_run(conn, task["id"], "This was interrupted by a restart. Please send it again.")
 
 
-def start_task(conn, board_id: str, person_name: str, text: str) -> str:
-    """Create a new input task; explicit transcript endpoints continue clarification."""
+def start_task(conn, board_id: str, who: "speaker.Speaker | str", text: str) -> str:
+    """Create a new input task; explicit transcript endpoints continue clarification.
+
+    `who` is the request's speaker annotation, or a plain label (e.g. "sensor") for non-speech sources.
+    """
     task_id = db.new_id()
+    person_name = who.person.name if isinstance(who, speaker.Speaker) else who
     conn.execute(
         "INSERT INTO tasks (id, board_id, person, prompt, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'running', ?, ?)",
         (task_id, board_id, person_name, text, db.now(), db.now()),
     )
+    if isinstance(who, speaker.Speaker):
+        speaker.save(conn, task_id, who)
     return task_id
 
 
 async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResults | None = None) -> dict:
     t = db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)
     board = config.BOARDS[t["board_id"]]
-    deps = Deps(board=board, person=config.person(t["person"]), task_id=task_id, db=conn)
+    who = speaker.load(conn, task_id, t["person"])  # persisted, so a resumed approval keeps the same speaker
+    deps = Deps(board=board, person=who.person, task_id=task_id, db=conn, speaker=who)
     history = ModelMessagesTypeAdapter.validate_json(t["messages"])
     _update(conn, task_id, status="running")
 

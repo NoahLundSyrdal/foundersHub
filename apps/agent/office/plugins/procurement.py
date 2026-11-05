@@ -57,7 +57,7 @@ def execute_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> 
         value["approval_required"] = True
         workflow.store_context(conn, task_id, value)
     if requires_human and not ctx.tool_call_approved:
-        raise ApprovalRequired(metadata=workflow.approval_metadata(value, ctx.deps.person.name))
+        raise ApprovalRequired(metadata=workflow.approval_metadata(value, ctx.deps.person.name, ctx.deps.speaker))
     if requires_human and value.get("approved_fingerprint") != proposal_fingerprint(proposal):
         return "Refused: exact quote approval has not been recorded."
     conn.execute("INSERT INTO procurement_attempts VALUES(?,?,?,'started',NULL)",

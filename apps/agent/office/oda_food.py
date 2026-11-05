@@ -5,7 +5,7 @@ import time
 from decimal import Decimal
 from urllib.parse import urlsplit
 
-from office import bus, config, db, procurement_workflow as workflow
+from office import approval_email, bus, config, db, procurement_workflow as workflow
 from office_procurement.food import plan_groceries, _price
 from office_procurement.models import GroceryNeed
 from office_procurement.oda import OdaClient, cart_quantities
@@ -52,6 +52,8 @@ class OdaFoodService:
         command = db.set_command(self.conn, task["board_id"], reply, "green" if status == "checkout_ready" else "amber")
         bus.publish("task.updated", task, source=self.conn)
         bus.publish("requests.updated", {"request_id": task_id}, source=self.conn)
+        if status == "awaiting_approval":
+            approval_email.notify(self.conn, task_id)
         return task | {"command": command}
 
     async def prepare(self, task_id, value):

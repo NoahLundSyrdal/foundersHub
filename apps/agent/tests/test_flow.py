@@ -53,7 +53,7 @@ def test_over_office_cap_always_needs_the_routed_human_even_for_manager(api):
     task = say(api, "we need 10 toner", person="Leo", board="printer")  # far above the 1000 NOK cap
     details = task["pending"][0]["details"]
     assert task["status"] == "awaiting_approval" and orders(api) == []
-    assert details["approval_type"] == "purchase_over_cap" and details["approver"] == "Leo"
+    assert details["approval_type"] == "purchase_over_cap" and details["approver"] == "Noah"
 
 
 def test_no_duplicate_order_while_one_is_open(api):
