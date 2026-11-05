@@ -131,8 +131,9 @@ async def plan_groceries(need: GroceryNeed, search_results: list[dict], model: s
                                         "office manager: when package size or brand is not specified, choose a standard office-appropriate "
                                         "package (for coffee, a regular 0.5-1 kg pack) and keep the requested pack quantity. A person reviews "
                                         "and approves the basket before it reaches the cart, so prefer a sensible proposal over a question. "
-                                        "Never ask about package size, brand, variety (e.g. with/without pulp), or how many packs: choose the most ordinary option yourself. " "Ask a question only if the product itself is genuinely ambiguous or a stated diet/allergen "
-                                        "requirement cannot be verified from the data. Never infer dietary guarantees. "
+                                        "Never ask clarifying questions. Use sensible defaults for unspecified details. "
+                                        "If an explicit diet, allergen or amount constraint cannot be verified, return no lines and a brief blocker in reason. "
+                                        "Never infer dietary guarantees. "
                                         "Give a concise source-supported reason. Delivery fees are unknown; no checkout or payment."))
             async with asyncio.timeout(20):
                 result = await agent.run(json.dumps({"need": need.model_dump(), "products_by_query": batches,
