@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, bus, config, db, voice, procurement_workflow, legacy
-from office import facility_api
+from office import facility_api, oda_food, oda_api
 from office.facility_rules import FacilityReading
 
 
@@ -49,6 +49,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     conn = db.connect(db_path)
     procurement_workflow.ensure_schema(conn)
     agent.recover_interrupted(conn)
+    groceries = oda_food.service(conn)
     mutation_lock = asyncio.Lock()
     facilities = facility_api.FacilityService(conn, mutation_lock)
 
@@ -60,6 +61,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         try:
             yield
         finally:
+            oda_food.release(conn)
             monitor.cancel()
             with suppress(asyncio.CancelledError):
                 await monitor
@@ -68,8 +70,10 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.state.conn = conn
     app.state.mutation_lock = mutation_lock
     app.state.facilities = facilities
+    app.state.oda_food = groceries
     app.include_router(legacy.router(conn))
     app.include_router(facility_api.router(facilities))
+    app.include_router(oda_api.router(groceries))
 
     def board_or_404(board_id: str) -> config.Board:
         if board_id not in config.BOARDS:

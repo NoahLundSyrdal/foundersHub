@@ -86,6 +86,24 @@ def _update(conn, task_id: str, **fields) -> dict:
 def _close_failed_run(conn, task_id: str, reply: str) -> dict:
     """Record a run that stopped early. Only a real execution attempt can make an order uncertain."""
     procurement_workflow.ensure_schema(conn)
+    cart_attempt = procurement_workflow.oda_attempt(conn, task_id)
+    if cart_attempt:
+        value = procurement_workflow.get_context(conn, task_id)
+        grocery = value.get("grocery") if value else None
+        if cart_attempt["state"] == "confirmed":
+            if isinstance(grocery, dict):
+                grocery.update(state="cart_ready", cart_url=cart_attempt["cart_url"] or grocery.get("cart_url"))
+                procurement_workflow.store_context(conn, task_id, value)
+            return _update(conn, task_id, status="checkout_ready", pending="[]",
+                           reply="Oda cart ready. Review delivery and pay on Oda; no order has been placed yet.")
+        # Keep the exact basket and pending snapshot: later approval can only perform
+        # Oda's read-only reconciliation, never replay an additive cart mutation.
+        if isinstance(grocery, dict):
+            grocery["state"] = "uncertain"
+            procurement_workflow.store_context(conn, task_id, value)
+        conn.execute("UPDATE oda_cart_attempts SET state='uncertain',updated_at=? WHERE task_id=?", (db.now(), task_id))
+        return _update(conn, task_id, status="failed",
+                       reply="Oda cart update was interrupted. Check Oda to reconcile it; these products will not be added again.")
     attempt = db.row(conn, "SELECT state, reference FROM procurement_attempts WHERE task_id = ?", task_id)
     if attempt and attempt["state"] == "confirmed":
         reply = f"Ordered (simulated), ref {attempt['reference']}."
@@ -128,6 +146,9 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
     try:
         prepared = await procurement_workflow.prepare_need(conn, task_id, prompt)
         decision = prepared["interpretation"]
+        if prepared.get("source") == "oda-food":
+            from office.oda_food import service
+            return service(conn).stage(task_id, prepared)
         if prompt is not None and (decision["intent"] == "clarification" or prepared.get("question")):
             reply = prepared.get("question") or decision["question"] or "Please clarify the requested supply or service."
             return _update(conn, task_id, status="done", reply=reply) | {"command": db.set_command(conn, board.id, reply, "amber")}
@@ -153,7 +174,7 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
     except Exception as e:  # demo: surface any failure on the board instead of crashing the request
         task = _close_failed_run(conn, task_id, f"Sorry, something went wrong: {type(e).__name__}")
         bus.publish("board.say", {"board_id": board.id, "text": task["reply"]})
-        color = "green" if task["status"] == "done" else "red"
+        color = "green" if task["status"] in {"done", "checkout_ready"} else "red"
         return task | {"command": db.set_command(conn, board.id, task["reply"], color)}
 
     out = result.output
@@ -176,6 +197,12 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
 async def decide(conn, task_id: str, approve: bool, proposal_fingerprint: str | None = None) -> dict:
     """Resolve the stored pending calls. Args come from the DB, never the client, so approval = exactly what was shown."""
     prepared = procurement_workflow.get_context(conn, task_id)
+    if prepared and prepared.get("source") == "oda-food":
+        from office.oda_food import service
+        try:
+            return await service(conn).decide(task_id, approve, proposal_fingerprint)
+        except procurement_workflow.ProcurementConflict as error:
+            raise StaleApproval(str(error)) from error
     if prepared and prepared.get("source") == "facility-rule":
         from office.facility_api import decide_replenishment
         try:

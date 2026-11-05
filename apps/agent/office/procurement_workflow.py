@@ -31,6 +31,18 @@ def get_context(conn, task_id):
     return json.loads(row["body"]) if row else None
 
 
+def oda_attempt(conn, task_id):
+    """Inspect persisted cart work without initializing Oda or touching its account."""
+    if not db.row(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='oda_cart_attempts'"):
+        return None
+    return db.row(conn, "SELECT * FROM oda_cart_attempts WHERE task_id=?", task_id)
+
+
+def execution_attempted(conn, task_id):
+    ensure_schema(conn)
+    return bool(db.row(conn, "SELECT 1 FROM procurement_attempts WHERE task_id=?", task_id) or oda_attempt(conn, task_id))
+
+
 def store_context(conn, task_id, value):
     conn.execute("INSERT INTO procurement_context VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET body=excluded.body",
                  (task_id, proposal_fingerprint(value)))
@@ -38,7 +50,7 @@ def store_context(conn, task_id, value):
 
 def enrich_task(conn, task):
     value = get_context(conn, task["id"])
-    return task | {key: value.get(key) for key in ("assessment", "proposal", "research", "approval_required")} if value else task
+    return task | {key: value.get(key) for key in ("assessment", "proposal", "research", "approval_required", "grocery")} if value else task
 
 
 def current_configuration():
@@ -65,7 +77,9 @@ async def prepare_need(conn, task_id: str, text: str | None):
         if not old:
             raise ProcurementConflict("Stored assessment is missing; create a new request.")
         return old
-    if old and old.get("proposal"):
+    if execution_attempted(conn, task_id):
+        raise ProcurementConflict("Execution was already attempted; reconcile its outcome instead of reinterpreting this task.")
+    if old and (old.get("proposal") or (old.get("grocery") or {}).get("proposal")):
         raise ProcurementConflict("This task already has a quote. Create a new request instead of changing an approval.")
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
     stations, products, templates, rules = current_configuration()
@@ -74,6 +88,7 @@ async def prepare_need(conn, task_id: str, text: str | None):
         raise ProcurementConflict("Board has no configured procurement station.")
     requests = open_requests(conn, task_id)
     provider = "mock" if config.MODEL == "mock" else "anthropic"
+    from office import oda_food
     if provider == "anthropic" and not config.MODEL.startswith("anthropic:"):
         raise ProcurementConflict("Procurement supports mock or the configured Anthropic provider.")
     result = await run_worker(WorkerInput.model_validate({
@@ -82,11 +97,14 @@ async def prepare_need(conn, task_id: str, text: str | None):
         "policy": {k: rules[k] for k in ("max_order_nok", "require_approval", "preferences")},
         "open_requests": [{k: r[k] for k in ("id", "station_id", "item_id", "status")} for r in requests[:100]],
         "provider": provider, "model": config.MODEL.split(":", 1)[1] if provider == "anthropic" else None,
+        "grocery_enabled": oda_food.enabled(),
     }))
     decision = result.interpretation.model_dump()
     value = {"interpretation": decision, "assessment": decision["assessment"], "research": [r.model_dump(mode="json") for r in result.research],
              "proposal": None, "approval_required": True, "prepared_at": db.now()}
-    if decision["intent"] == "purchase" or (decision["intent"] == "maintenance" and decision["item_id"]):
+    if decision["intent"] == "grocery":
+        value = await oda_food.service(conn).prepare(task_id, value)
+    elif decision["intent"] == "purchase" or (decision["intent"] == "maintenance" and decision["item_id"]):
         plan = plan_purchase(station, decision["item_id"], decision["quantity"], requests, products, templates, rules, time.time())
         if plan["kind"] == "proposal":
             value["proposal"] = plan["proposal"]
@@ -148,10 +166,17 @@ def approval_metadata(value, person_name):
 
 def release_quote(conn, task_id):
     """Nothing was attempted, so drop the quote: it must not block the item or look like an order."""
+    if execution_attempted(conn, task_id):
+        return
     value = get_context(conn, task_id)
-    if value and value.get("proposal"):
+    if value:
         value["proposal"] = None
         value.pop("approved_fingerprint", None)
+        grocery = value.get("grocery")
+        if isinstance(grocery, dict) and grocery.get("proposal"):
+            grocery.update(proposal=None, state="failed", cart_url=None,
+                           question="Preparation stopped before any cart update. Submit the request again for a fresh basket.")
+        value["approval_required"] = True
         store_context(conn, task_id, value)
 
 

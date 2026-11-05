@@ -15,7 +15,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models import Model
 from pydantic_ai.usage import UsageLimits
 
-from .models import Assessment, Interpretation, Product, Progress, Research, WorkerInput, WorkerOutput
+from .models import GroceryItem, GroceryNeed, Assessment, Interpretation, Product, Progress, Research, WorkerInput, WorkerOutput
 
 
 @dataclass
@@ -46,6 +46,14 @@ def clarify(request: WorkerInput, question: str, assessment: Assessment | None =
 
 def validate_decision(request: WorkerInput, decision: Interpretation) -> Interpretation:
     products = {p.id: p for p in allowed_products(request)}
+    if decision.intent == "grocery":
+        if not request.grocery_enabled or decision.grocery is None or decision.item_id is not None or decision.quantity != 1:
+            return clarify(request, "Please clarify the food items and pack quantities you need.", decision.assessment)
+        if decision.grocery.question:
+            return clarify(request, decision.grocery.question, decision.assessment)
+        return decision
+    if decision.grocery is not None:
+        return clarify(request, "Please clarify whether you need groceries or an office supply.", decision.assessment)
     if decision.intent == "clarification":
         return clarify(request, decision.question or "Please clarify the supply or service you need.", decision.assessment)
     if decision.item_id is not None and decision.item_id not in products:
@@ -84,7 +92,11 @@ def mock_interpret(request: WorkerInput) -> Interpretation:
             matches = ["ventilation-service"]
         else:
             matches = []
-    elif re.search(r"co2|co₂|ventilat|air quality|luftkvalitet", text):
+    elif request.grocery_enabled:
+        grocery = mock_grocery(request)
+        if grocery is not None:
+            return grocery
+    if not maintenance and re.search(r"co2|co₂|ventilat|air quality|luftkvalitet", text):
         matches = ["ventilation-service"]
         maintenance = True
     if not matches and not maintenance and re.search(r"\b(paper|papir)\b", text):
@@ -109,6 +121,37 @@ def mock_interpret(request: WorkerInput) -> Interpretation:
         return clarify(request, "Please request between 1 and 20 units.")
     return Interpretation(intent="maintenance" if maintenance else "purchase", item_id=item,
                           summary=request.text[:500], quantity=quantity, question=None, assessment=assessment)
+
+
+def mock_grocery(request: WorkerInput) -> Interpretation | None:
+    """Conservative deterministic recognition for credential-free local tests."""
+    text = request.text.lower()
+    foods = {"coffee": r"coffee|kaffe", "milk": r"milk|melk", "bananas": r"bananas?|bananer?",
+             "pizza": r"pizza", "bread": r"bread|brød", "water": r"water|vann",
+             "juice": r"juice", "tea": r"tea|te"}
+    found = []
+    for name, alias in foods.items():
+        match = re.search(r"\b(?:" + alias + r")\b", text)
+        if match:
+            prefix = text[:match.start()]
+            amount = re.search(r"(\d+)\s*(?:(?:packs?|bags?|units?|bottles?|cartons?|pakker?|poser?|flasker?)\s+(?:of\s+)?)?$", prefix)
+            quantity = int(amount.group(1)) if amount else 1
+            found.append((match.start(), name, quantity))
+    generic = re.search(r"\b(food|mat|groceries|drinks|drikke|catering|lunch|lunsj|dinner|middag|recipe|oppskrift)\b", text)
+    if not found and not generic:
+        return None
+    if re.search(r"catering|recipe|oppskrift|people|persons|personer|allerg|diet|vegan|vegetar", text):
+        return clarify(request, "Which food items and pack quantities do you need, and what dietary requirements must be met?")
+    if not found:
+        return clarify(request, "What food or drinks do you need, for how many people, and in what quantities?")
+    if re.search(r"\d+\s*(?:kg|grams?|g|litres?|liters?|l)\b", text):
+        return clarify(request, "Please specify the food package size and number of packs so the requested amount can be matched.")
+    if any(not 1 <= quantity <= 20 for _, _, quantity in found):
+        return clarify(request, "Please request between 1 and 20 packs of each food item.")
+    return Interpretation(intent="grocery", item_id=None, summary=request.text[:500], quantity=1, question=None,
+                          grocery=GroceryNeed(items=[GroceryItem(query=name, quantity=quantity) for _, name, quantity in sorted(found)], summary=request.text[:500]),
+                          assessment=Assessment(severity="routine", confidence=0.95, requires_confirmation=False,
+                                                reason="Food needs require live Oda product search and a reviewed checkout basket."))
 
 
 async def search_item(context: Context, item_id: str, *, client: httpx.AsyncClient | None = None) -> list[Research]:
@@ -175,6 +218,14 @@ def create_agent(model: str | Model) -> Agent[Context, Interpretation]:
     agent = Agent(model, deps_type=Context, output_type=Interpretation, retries=1,
                   instructions=(
                       "Interpret an office supply or repair request into exactly one structured need. "
+                      "If grocery_enabled is true, food and drinks (including coffee) use intent grocery with item_id null, "
+                      "root quantity 1, routine assessment and grocery:{items:[{query,quantity}],summary,question:null}. "
+                      "Food query describes the requested food and package constraints; quantity is the explicit requested pack count (1..20). "
+                      "Several foods may form one grocery need (max10); never use fixture catalogue food prices. "
+                      "Generic order-food, recipes, catering/headcount without item quantities, or unclear dietary/allergen needs "
+                      "require clarification; do not invent meals, quantities or dietary requirements. "
+                      "If grocery_enabled is false preserve the approved catalogue workflow and never emit grocery. "
+                      "Nonfood faults and critical hazards remain maintenance. "
                       "Use list_catalogue and office_policy to see the approved scope. Multiple distinct needs "
                       "or ambiguous/unapproved items require clarification. Never invent a SKU, supplier quote, "
                       "rating, delivery time, booking or order. A service in catalogue can be a maintenance "
@@ -230,7 +281,7 @@ async def run_worker(request: WorkerInput, *, model: str | Model | None = None) 
         else:
             model = model or f"anthropic:{request.model or os.environ.get('ANTHROPIC_MODEL', 'claude-sonnet-5-5')}"
             agent = create_agent(model)
-            prompt = json.dumps({"station": request.station.model_dump(), "request": request.text}, ensure_ascii=False)
+            prompt = json.dumps({"station": request.station.model_dump(), "request": request.text, "grocery_enabled": request.grocery_enabled}, ensure_ascii=False)
             result = await agent.run(prompt, deps=context,
                                      usage_limits=UsageLimits(request_limit=5, tool_calls_limit=10, total_tokens_limit=12_000),
                                      model_settings={"timeout": 15, "max_tokens": 1200})
