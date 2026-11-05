@@ -1,0 +1,23 @@
+[
+  {
+    "id": "kitchen",
+    "name": "Kitchen",
+    "responsible_team": "Facilities",
+    "equipment": ["coffee machine", "dishwasher"],
+    "item_ids": ["coffee", "cups"]
+  },
+  {
+    "id": "bathroom",
+    "name": "Bathroom",
+    "responsible_team": "Cleaning team",
+    "equipment": ["toilet", "sink", "soap dispenser"],
+    "item_ids": ["toilet-paper", "soap"]
+  },
+  {
+    "id": "printer",
+    "name": "Printer area",
+    "responsible_team": "IT support",
+    "equipment": ["printer"],
+    "item_ids": ["printer-paper", "toner"]
+  }
+]

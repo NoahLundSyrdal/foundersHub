@@ -1,0 +1,29 @@
+{
+  "name": "founders-hub",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "apps/server",
+    "packages/contracts"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"npm run dev -w @office/server\" \"npm run dev -w @office/web\"",
+    "dev:server": "npm run dev -w @office/server",
+    "dev:web": "npm run dev -w @office/web",
+    "check": "npm run check --workspaces --if-present",
+    "build": "npm run build -w @office/web",
+    "test": "npm run test -w @office/server && python3 -m unittest discover -s apps/device/tests",
+    "contracts:export": "npm run export -w @office/contracts",
+    "device:simulate": "python3 apps/device/src/bridge.py --simulate --station kitchen --text 'We need coffee'"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "tsx": "^4.20.6",
+    "@types/node": "^22.18.0"
+  }
+}

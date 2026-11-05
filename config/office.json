@@ -1,0 +1,8 @@
+{
+  "name": "Founders Hub Demo Office",
+  "currency": "NOK",
+  "max_order_nok": 1000,
+  "require_approval": true,
+  "preferences": ["Use approved catalogue", "Prefer predictable delivery"],
+  "delivery_address": "Configure before enabling a real supplier"
+}

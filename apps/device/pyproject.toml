@@ -1,0 +1,9 @@
+[project]
+name = "office-device-bridge"
+version = "0.1.0"
+description = "Local Atech USB bridge and hardware-free event simulator"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+usb = ["pyserial>=3.5,<4"]
