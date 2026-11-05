@@ -7,7 +7,7 @@ The office assistant has two main use cases. Both start with someone speaking to
 | 1. CO₂ checker | "Is it bad air quality here or what?" | A spoken or on-screen answer based on a real reading |
 | 2. Order by voice | "We need coffee" | A processed order and a ticket |
 
-Neither use case works end to end yet. Each one lists what is missing.
+Neither use case works end to end on `main` yet. Each one lists what is missing. Speech to text and the air quality check are on the `air-quality-stt` branch, which is not merged.
 
 ## 1. CO₂ checker
 
@@ -21,38 +21,42 @@ Someone asks about the air in the room and gets a plain answer.
 
 **Flow**
 
-1. A person presses the station button and asks the question.
+1. A person asks the question.
 2. Speech is turned into text.
-3. The assistant recognises this as an air quality question, not an order.
-4. It reads the latest CO₂ value.
-5. It answers with the level and what to do, for example: "CO₂ is 1600 ppm, which is poor. Open a window."
+3. The speech script spots an air quality question, so it does not treat it as an order.
+4. It gets the latest readings from `GET /api/air-quality`.
+5. It answers with the level and what to do, for example: "Air quality is poor: CO2 1700 ppm. Open a window."
 
 **How to judge the reading**
 
-| CO₂ (ppm) | Rating | Answer |
+| CO₂ (ppm) | Level | Answer |
 | --- | --- | --- |
-| Under 800 | Fresh | The air is fine |
-| 800–1200 | Acceptable | The air is okay |
-| 1200–1500 | Getting stuffy | Consider opening a window |
-| 1500–2000 | Poor | Open a window; people may feel sleepy or distracted |
-| Over 2000 | Uncomfortable | Air the room now |
+| Up to 1000 | Good | The air is fine |
+| 1000–1500 | Moderate | Consider opening a window |
+| Over 1500 | Poor | Open a window |
 
-These follow the bands in the CO₂ section of [the component guide](components.md). That guide leaves 1200–1500 undefined, so "Getting stuffy" is our own label.
+These are the thresholds in `apps/server/src/environment/air.ts` on the `air-quality-stt` branch. Temperature and humidity also count, and the worst reading sets the level.
 
 **Rules**
 
-- Only state a level that came from a real reading. If there is no fresh reading, say so.
+- Only state a level that came from a real reading. If there are no readings, say so.
+- Say when readings are more than 2 minutes old.
 - Label any simulated reading as simulated.
 - The sensor reads the air where it sits. "Here" only means the room the sensor is in.
 - The sensor returns 0 for about 5 seconds after boot. Treat that as no reading, not as clean air.
 
+**What works on the `air-quality-stt` branch**
+
+- Speech to text from the laptop microphone
+- Air quality answers from temperature and humidity, read aloud on a Mac with `--speak`
+
+Without a CO₂ sensor the answer says "no CO2 sensor", so today it is an air comfort check and not a CO₂ check.
+
 **What is missing**
 
+- **Merging the branch into `main`.**
 - **The CO₂ sensor.** [Our kit](components.md#our-kit-counted-from-photos-2026-11-05) does not include one. We need the Atech CO₂ module (SCD40, 469 NOK). The temperature and humidity module cannot measure CO₂.
-- Firmware that reads the sensor and sends the value to the server.
-- A new request type for questions. Today the assistant only handles `purchase`, `maintenance` and `clarification`. This changes `packages/contracts`, so agree it with the team first.
-- A way to give the answer back. The Screen is on the board, but the Speaker is still loose and spoken answers are not built.
-- Speech to text on the device path (see below).
+- Firmware that reads the CO₂ sensor and sends the value. The bridge already forwards any sensor key containing `co2`.
 
 ## 2. Order by voice
 
@@ -65,7 +69,7 @@ Someone asks for something. The assistant understands the request, processes the
 
 **Flow**
 
-1. A person presses the station button and says what they need.
+1. A person says what they need at a station.
 2. Speech is turned into text.
 3. The assistant works out the item and quantity, using the station for context. If the request is unclear, it asks a question.
 4. The server checks the catalogue, price and spending rules, then creates a proposal.
@@ -92,11 +96,11 @@ Someone asks for something. The assistant understands the request, processes the
 **What is missing**
 
 - **The ticket for orders.** Today a request is the only record. Orders end with the status `ordered`, and only maintenance requests are described as tickets, with the status `maintenance_open`. Those are local records.
-- Speech to text from the board's microphone into the server. The speech work is in progress on a separate task and is not in `main` yet.
+- Speech to text on `main`. The `air-quality-stt` branch sends transcripts from the laptop microphone to the server. The board's microphone is not used.
 - A real supplier. Real orders need separate work and explicit permission.
 
 ## Open questions
 
 - **CO₂ sensor:** Are we buying one, or showing a clearly labelled simulated reading in the demo?
 - **Ticket:** Is a local ticket in the dashboard enough, or should it also go to an outside system? Sending it elsewhere needs explicit permission.
-- **Answers:** Should the assistant speak its answers, or is the screen enough?
+- **Answers:** Is the laptop voice enough for the demo, or should answers also come from the board's screen or speaker?
