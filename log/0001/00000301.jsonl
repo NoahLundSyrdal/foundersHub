@@ -1,0 +1,1 @@
+{"id":"mw3vz2ij724647ff","member":"noah-lund-syrdal-b43119","lamport":421,"ts":1793903747707,"type":"upsert","kind":"task","key":"safe-local-main-sync","data":{"title":"Bring latest main into the current local checkout while preserving existing work","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["root checkout","local integration"]},"source":"explicit"}
