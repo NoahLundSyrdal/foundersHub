@@ -123,6 +123,10 @@ def mock_interpret(request: WorkerInput) -> Interpretation:
                           summary=request.text[:500], quantity=quantity, question=None, assessment=assessment)
 
 
+NUMBER_WORDS = {"en": 1, "ett": 1, "ei": 1, "one": 1, "to": 2, "two": 2, "tre": 3, "three": 3, "fire": 4, "four": 4,
+                "fem": 5, "five": 5, "seks": 6, "six": 6}
+
+
 def mock_grocery(request: WorkerInput) -> Interpretation | None:
     """Conservative deterministic recognition for credential-free local tests."""
     text = request.text.lower()
@@ -134,8 +138,11 @@ def mock_grocery(request: WorkerInput) -> Interpretation | None:
         match = re.search(r"\b(?:" + alias + r")\b", text)
         if match:
             prefix = text[:match.start()]
-            amount = re.search(r"(\d+)\s*(?:(?:packs?|bags?|units?|bottles?|cartons?|pakker?|poser?|flasker?)\s+(?:of\s+)?)?$", prefix)
-            quantity = int(amount.group(1)) if amount else 1
+            amount = re.search(r"(\d+|" + "|".join(NUMBER_WORDS) + r")\s+(?:(?:store?|små|large|big|small|regular|vanlige?)\s+)?(?:(?:packs?|bags?|units?|bottles?|cartons?|pakker?|pakke|poser?|flasker?)\s+(?:of\s+|med\s+)?)?$", prefix)
+            if amount:
+                quantity = int(amount.group(1)) if amount.group(1).isdigit() else NUMBER_WORDS[amount.group(1)]
+            else:  # reasonable office default; "a lot"/"heavy order" means a few packs
+                quantity = 3 if re.search(r"\b(mye|masse|tung|stor bestilling|a lot|lots|plenty|big order|heavy)\b", text) else 1
             found.append((match.start(), name, quantity))
     generic = re.search(r"\b(food|mat|groceries|drinks|drikke|catering|lunch|lunsj|dinner|middag|recipe|oppskrift)\b", text)
     if not found and not generic:
@@ -144,8 +151,6 @@ def mock_grocery(request: WorkerInput) -> Interpretation | None:
         return clarify(request, "Which food items and pack quantities do you need, and what dietary requirements must be met?")
     if not found:
         return clarify(request, "What food or drinks do you need, for how many people, and in what quantities?")
-    if re.search(r"\d+\s*(?:kg|grams?|g|litres?|liters?|l)\b", text):
-        return clarify(request, "Please specify the food package size and number of packs so the requested amount can be matched.")
     if any(not 1 <= quantity <= 20 for _, _, quantity in found):
         return clarify(request, "Please request between 1 and 20 packs of each food item.")
     return Interpretation(intent="grocery", item_id=None, summary=request.text[:500], quantity=1, question=None,

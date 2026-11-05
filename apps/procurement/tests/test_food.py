@@ -67,10 +67,12 @@ class FoodTests(unittest.IsolatedAsyncioTestCase):
         exact = await plan_groceries(need(quantity=3), results(product(price="0.10")), "mock", 0.30)
         self.assertEqual(exact["proposal"]["subtotal_nok"], 0.30)
 
-    async def test_unknown_match_or_noncomparable_units_asks(self):
-        for search in [results(product(name="Soap", description="Hand soap")),
-                       results(product(), product(product_id=43, unitName="bottle"))]:
-            self.assertEqual((await plan_groceries(need(), search, "mock", 100))["kind"], "clarification")
+    async def test_unknown_match_asks_but_mixed_units_get_a_default(self):
+        # A search that returned something else entirely is genuinely unclear.
+        self.assertEqual((await plan_groceries(need(), results(product(name="Soap", description="Hand soap")), "mock", 100))["kind"], "clarification")
+        # Different package units are not a reason to stop: propose a sensible default for human review.
+        mixed = await plan_groceries(need(), results(product(), product(product_id=43, unitName="bottle")), "mock", 100)
+        self.assertEqual(mixed["kind"], "proposal")
 
     async def test_duplicate_product_aggregates_but_respects_pack_limit(self):
         groceries = GroceryNeed(items=[{"query": "milk", "quantity": 2}, {"query": "milk carton", "quantity": 3}], summary="Milk")
@@ -98,8 +100,13 @@ class FoodTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([(i.query, i.quantity) for i in decision.grocery.items], [("milk", 2), ("bananas", 3), ("coffee", 1)])
         self.assertIsNone(decision.item_id)
         self.assertEqual(validate_decision(request(), decision).intent, "clarification")
-        for text in ["Order food", "Pizza for 10 people", "Order vegan pizza", "Order 3 kg bananas"]:
+        for text in ["Order food", "Pizza for 10 people", "Order vegan pizza"]:
             self.assertEqual((await run_worker(request(text, grocery_enabled=True))).interpretation.intent, "clarification")
+        # Sensible defaults instead of questions: a stated weight is a size hint; number words and "a lot" set packs.
+        for text, packs in [("Order 3 kg bananas", 1), ("to store pakker med kaffe", 2), ("tung bestilling på kaffe", 3), ("vi er tomme for kaffe", 1)]:
+            decision = (await run_worker(request(text, grocery_enabled=True))).interpretation
+            self.assertEqual(decision.intent, "grocery", text)
+            self.assertEqual(decision.grocery.items[0].quantity, packs, text)
         for text in ["Coffee machine is broken", "There is a fire"]:
             self.assertEqual((await run_worker(request(text, grocery_enabled=True))).interpretation.intent, "maintenance")
 
