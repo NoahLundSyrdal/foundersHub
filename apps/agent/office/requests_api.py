@@ -4,7 +4,9 @@ Projects agent tasks onto the `OfficeRequest` shape in packages/contracts, which
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from office import agent, bus, config, db
+from office import agent, bus, config, db, environment_queries
+from office.room_service import request_overlay
+from office.room_messaging import RoomMessageConflict
 from office.procurement_workflow import enrich_task
 from office import procurement_workflow
 from office_procurement.serialization import proposal_fingerprint
@@ -21,11 +23,13 @@ def request_view(conn, task_id: str) -> dict:
     status = task["status"]
     if status == "running":
         status = "processing"
+    elif status == "awaiting_input" and raw["messages"] != "[]":
+        status = "needs_clarification"
     elif status == "done":
         status = ("resolved" if order["status"] == "delivered" else "ordered") if order else (
             ("resolved" if ticket["status"] == "resolved" else "maintenance_open") if ticket else
             # A finished proposal with no order was refused, so nothing is left to do.
-            "resolved" if task.get("proposal") or (task.get("grocery") or {}).get("proposal") or interpretation.get("intent") == "conversation" else "needs_clarification")
+            "resolved" if task.get("proposal") or (task.get("grocery") or {}).get("proposal") or interpretation.get("intent") == "conversation" or raw["messages"] != "[]" else "needs_clarification")
     proposal = task.get("proposal")
     return {
         "id": task_id, "station_id": task["board_id"], "user_id": None,
@@ -41,6 +45,8 @@ def request_view(conn, task_id: str) -> dict:
         "approval": task.get("approval"),  # {type, approver, reason} from the company brain's routing table
         "research": task.get("research", []),
         "grocery": task.get("grocery"),
+        **environment_queries.overlay(conn, task_id),
+        **request_overlay(conn, task_id),
     }
 
 
@@ -55,6 +61,7 @@ def response(conn, task_id: str, duplicate=False):
 
 class Transcript(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
+    event_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class Approval(BaseModel):
@@ -77,17 +84,42 @@ def router(conn):
     @routes.post("/api/requests/{task_id}/transcript")
     async def transcript(task_id: str, body: Transcript, request: Request):
         async with request.app.state.mutation_lock:
-            return await apply_transcript(task_id, body)
+            rooms = request.app.state.rooms
+            if config.MODEL == "mock":
+                current = request_view(conn, task_id)
+                try:
+                    room = await rooms.try_handle(current["station_id"], body.text, task_id=task_id,
+                        conversation_id=task_id if rooms._load(task_id) else None, event_id=body.event_id)
+                except RoomMessageConflict as error:
+                    raise HTTPException(409, str(error)) from error
+                if room is not None:
+                    return response(conn, room["id"])
+            return await apply_transcript(task_id, body, rooms)
 
-    async def apply_transcript(task_id: str, body: Transcript):
+    async def apply_transcript(task_id: str, body: Transcript, rooms):
         current = request_view(conn, task_id)
-        if current["proposal"] or (current.get("grocery") or {}).get("proposal") or current["status"] not in {"awaiting_input", "needs_clarification", "failed"}:
+        if config.MODEL != "mock":
+            from office import conversation
+            try:
+                previous = conversation.input_receipt(conn, body.event_id, current["station_id"], body.text.strip(), task_id)
+            except RoomMessageConflict as error:
+                raise HTTPException(409, str(error)) from error
+            if previous:
+                return response(conn, previous, True)
+        if (current["proposal"] or (current.get("grocery") or {}).get("proposal") or current["supplier_reference"]
+                or current["assigned_to"] or procurement_workflow.execution_attempted(conn, task_id)
+                or current["status"] not in {"awaiting_input", "needs_clarification", "failed", "resolved"}):
             raise HTTPException(409, "Request already has an action")
         if not body.text.strip():
             raise HTTPException(400, "Transcript must not be blank")
+        if config.MODEL != "mock":
+            conversation.input_receipt(conn, body.event_id, current["station_id"], body.text.strip(), task_id, task_id=task_id)
         conn.execute("UPDATE tasks SET prompt=? WHERE id=?", (body.text.strip(), task_id))
-        await agent.run(conn, task_id, body.text.strip())
-        return response(conn, task_id)
+        result = await agent.run(conn, task_id, body.text.strip(), rooms=rooms, event_id=body.event_id,
+                                 conversation_id=task_id if rooms._load(task_id) else None)
+        if config.MODEL != "mock" and body.event_id:
+            conn.execute("UPDATE conversation_inputs SET task_id=? WHERE id=?", (result["id"], body.event_id))
+        return response(conn, result["id"])
 
     @routes.post("/api/requests/{task_id}/approve")
     async def approve(task_id: str, body: Approval, request: Request):

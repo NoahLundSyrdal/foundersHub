@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "dataset_id": {
+      "type": "string"
+    },
+    "board_id": {
+      "type": "string",
+      "enum": [
+        "kitchen",
+        "bathroom",
+        "printer"
+      ]
+    },
+    "simulation": {
+      "type": "boolean",
+      "const": true
+    },
+    "samples": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "days": {
+      "type": "number",
+      "const": 28
+    },
+    "seeded_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "label": {
+      "type": "string"
+    },
+    "timezone": {
+      "type": "string"
+    },
+    "local_date": {
+      "type": "string"
+    },
+    "date_range": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "string"
+        },
+        "end": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "additionalProperties": false
+    },
+    "interval_minutes": {
+      "type": "number",
+      "const": 10
+    },
+    "current_values": {
+      "type": "object",
+      "properties": {
+        "temperature_c": {
+          "type": "number",
+          "minimum": -40,
+          "maximum": 125
+        },
+        "humidity_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "co2_ppm": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      },
+      "required": [
+        "temperature_c",
+        "humidity_pct",
+        "co2_ppm"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "dataset_id",
+    "board_id",
+    "simulation",
+    "samples",
+    "days",
+    "seeded_at",
+    "label",
+    "timezone",
+    "local_date",
+    "date_range",
+    "interval_minutes",
+    "current_values"
+  ],
+  "additionalProperties": false
+}

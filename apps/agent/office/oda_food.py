@@ -6,7 +6,7 @@ from decimal import Decimal
 from urllib.parse import urlsplit
 
 from office import approval_email, bus, config, db, procurement_workflow as workflow
-from office_procurement.food import plan_groceries, _price
+from office_procurement.food import FoodPlanningError, plan_groceries, _price
 from office_procurement.models import GroceryNeed
 from office_procurement.oda import OdaClient, cart_quantities
 from office_procurement.serialization import proposal_fingerprint, epoch
@@ -77,6 +77,8 @@ class OdaFoodService:
                     grocery.update(state="awaiting_approval", proposal=plan["proposal"])
                 else:
                     grocery["question"] = plan["question"]
+            except FoodPlanningError as error:
+                grocery.update(state="failed", question=str(error))
             except Exception:
                 grocery.update(state="failed", question="Oda could not be reached. No cart changes were made; try this request again.")
         workflow.store_context(self.conn, task_id, value)
@@ -87,7 +89,8 @@ class OdaFoodService:
         if grocery["state"] == "awaiting_approval":
             reply = f"Review the Oda basket: {grocery['proposal']['subtotal_nok']:g} NOK in products; delivery fees pending."
             return self.finish(task_id, value, "awaiting_approval", reply)
-        return self.finish(task_id, value, "needs_clarification", grocery.get("question", "Please specify the food and pack quantities."))
+        return self.finish(task_id, value, "failed" if grocery["state"] == "failed" else "needs_clarification",
+                           grocery.get("question", "No verified Oda basket is available."))
 
     async def decide(self, task_id, approve, fingerprint):
         value = workflow.get_context(self.conn, task_id)

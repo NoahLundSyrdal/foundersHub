@@ -13,7 +13,7 @@ class ChatMessage(BaseModel):
     board_id: str = "office"
 
 
-def router(conn, lock):
+def router(conn, lock, rooms=None):
     conn.execute("CREATE TABLE IF NOT EXISTS chat_turns(event_id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, task_id TEXT NOT NULL, body TEXT NOT NULL)")
     routes = APIRouter(prefix="/api/chat")
 
@@ -45,6 +45,6 @@ def router(conn, lock):
                     ModelResponse(parts=[TextPart((turn["reply"] or "No response recorded") + f"\n[Request {turn['id']}; current status: {turn['status']}]")])])
             task_id = agent.start_task(conn, body.board_id, config.GUEST.name, body.text.strip())
             conn.execute("INSERT INTO chat_turns VALUES(?,?,?,?)", (body.event_id, body.conversation_id, task_id, payload))
-            await agent.run(conn, task_id, body.text.strip(), chat_history=messages)
+            await agent.run(conn, task_id, body.text.strip(), chat_history=messages, rooms=rooms, event_id=body.event_id)
             return requests_api.response(conn, task_id)
     return routes
