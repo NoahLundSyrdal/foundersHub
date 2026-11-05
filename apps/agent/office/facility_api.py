@@ -22,12 +22,14 @@ ALIASES = {
     "co2": "co2_ppm", "co2_ppm": "co2_ppm", "temperature": "temperature_c",
     "th_temperature": "temperature_c", "temperature_c": "temperature_c",
     "humidity": "humidity_pct", "th_humidity": "humidity_pct", "humidity_pct": "humidity_pct",
+    "co2_co2": "co2_ppm", "co2_temperature": "temperature_c", "co2_humidity": "humidity_pct",
+    "aht20_temperature": "temperature_c", "aht20_humidity": "humidity_pct",
     **{key: key for key in ("stock_level", "bin_fill_pct", "obstruction_mm", "noise_level", "tilt_deg", "heartbeat")},
 }
 
 
 def metric_for(key: str) -> str | None:
-    return ALIASES.get(key.lower()) or ("co2_ppm" if "co2" in key.lower() else None)
+    return ALIASES.get(key.lower())
 
 
 def _id(incident_id: str, action: str) -> str:
