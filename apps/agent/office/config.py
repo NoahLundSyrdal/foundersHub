@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(ROOT / ".env")
 
-MODEL = os.getenv("OFFICE_MODEL", "mock")  # "mock" = offline scripted model; e.g. "anthropic:claude-sonnet-5-5"
+# Scripted responses are an explicit test setting, never the live default.
+MODEL = os.getenv("OFFICE_MODEL") or f"anthropic:{os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-5-5')}"
 LIVE = MODEL != "mock"  # mock mode is fully offline: no Notion, local brain copy only
 DATA = ROOT / ".data"  # gitignored: runtime DB, memory, OAuth tokens, Notion snapshot
 MEMORY_PATH = os.getenv("MEMORY_PATH", str(DATA / "memory.sqlite"))

@@ -8,6 +8,7 @@ import httpx
 from office import config, db, oda_food
 from office.api import create_app
 from office_procurement.serialization import proposal_fingerprint
+from office_procurement.food import FoodPlanningError
 
 
 class FakeOda:
@@ -49,6 +50,16 @@ class FakeOda:
 
 
 class OdaFoodAPITests(unittest.IsolatedAsyncioTestCase):
+    async def test_selection_provider_failure_is_failed_without_fake_clarification(self):
+        with patch("office.oda_food.plan_groceries", side_effect=FoodPlanningError("Live selection failed; no basket prepared.")):
+            result = await self.client.post("/api/input", json={"board_id": "kitchen", "text": "Order 2 coffee"})
+        self.assertEqual(result.status_code, 200)
+        task = result.json()
+        self.assertEqual(task["status"], "failed")
+        self.assertEqual(task["grocery"]["state"], "failed")
+        self.assertIsNone(task["grocery"]["proposal"])
+        self.assertEqual(self.fake.writes, [])
+
     async def asyncSetUp(self):
         self.environment = patch.dict("os.environ", {"ODA_FOOD_ENABLED": "true", "ANTHROPIC_API_KEY": "", "TAVILY_API_KEY": ""})
         self.environment.start()

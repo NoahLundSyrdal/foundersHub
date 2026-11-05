@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "current": {
+      "type": "object",
+      "properties": {
+        "board_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "physical",
+            "synthetic"
+          ]
+        },
+        "simulation": {
+          "type": "boolean"
+        },
+        "readings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "temperature_c",
+                  "humidity_pct",
+                  "co2_ppm"
+                ]
+              },
+              "value": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "last_value": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "at": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "fresh",
+                  "stale",
+                  "missing",
+                  "demo"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "value",
+              "last_value",
+              "at",
+              "state"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "board_id",
+        "evaluated_at",
+        "readings"
+      ],
+      "additionalProperties": false
+    },
+    "history": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "insufficient",
+            "usually_hot",
+            "no_hot_pattern"
+          ]
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "physical",
+            "synthetic",
+            "none"
+          ]
+        },
+        "simulation": {
+          "type": "boolean"
+        },
+        "dataset_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "hot_days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "hot_fraction": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "window_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "weekday_class": {
+          "type": "string",
+          "enum": [
+            "weekday",
+            "weekend"
+          ]
+        },
+        "qualified_days": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "average_temperature_c": {
+                "type": "number"
+              },
+              "samples": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "bins": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "coverage_minutes": {
+                "type": "number",
+                "minimum": 0
+              },
+              "hot": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "date",
+              "average_temperature_c",
+              "samples",
+              "bins",
+              "coverage_minutes",
+              "hot"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "days",
+        "hot_days",
+        "hot_fraction",
+        "required_days",
+        "timezone",
+        "window_days",
+        "weekday_class",
+        "qualified_days",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "recommendation": {
+      "type": "string",
+      "enum": [
+        "avoid",
+        "caution",
+        "suitable",
+        "unknown"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "current",
+    "history",
+    "recommendation",
+    "summary"
+  ],
+  "additionalProperties": false
+}

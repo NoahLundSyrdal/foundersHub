@@ -1,0 +1,13 @@
+{
+  "rooms": [{ "name": "Test room", "simulation": true, "board_id": "kitchen" }],
+  "bookings": [{
+    "id": "example-booking",
+    "room_name": "Test room",
+    "starts_at": "2026-11-06T14:00:00+01:00",
+    "ends_at": "2026-11-06T14:30:00+01:00",
+    "owner_id": "example-owner",
+    "revision": 1,
+    "simulation": true
+  }],
+  "contacts": [{ "id": "example-owner", "name": "Example colleague", "whatsapp_number": null }]
+}

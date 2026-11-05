@@ -15,6 +15,10 @@ from pydantic_ai.usage import UsageLimits
 from .models import GroceryNeed, StrictModel
 
 
+class FoodPlanningError(Exception):
+    """Live selection failed rather than needing more user information."""
+
+
 class FoodLine(StrictModel):
     query_index: int = Field(ge=0, le=9, strict=True)
     product_id: int = Field(gt=0, strict=True)
@@ -173,6 +177,7 @@ async def plan_groceries(need: GroceryNeed, search_results: list[dict], model: s
                 "subtotal_nok": float(subtotal), "currency": "NOK", "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat(),
                 "checkout_required": True, "delivery_fees_pending": True,
                 "reason": selected.reason}}
-    except Exception:
-        # Provider details and untrusted content must never leak into an operational question.
-        return _clarify("I could not verify a suitable available Oda basket. Please clarify the food products and pack sizes, or search again.")
+    except (ValueError, TypeError, KeyError):
+        return _clarify("The returned Oda products, availability or prices did not form a valid basket. No cart changes were made.")
+    except Exception as error:
+        raise FoodPlanningError("Live Oda product selection failed. No basket or cart change was made.") from error
