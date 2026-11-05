@@ -1,0 +1,144 @@
+.tickets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr));
+  align-items: start;
+  gap: 12px;
+  margin-top: 14px;
+}
+.ticket {
+  --stub: 148px;
+  --notch: 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--stub);
+  animation: settle 240ms var(--ease-out);
+  /* The two bites out of the edges that make it read as a paper ticket. */
+  mask-image:
+    radial-gradient(circle var(--notch) at calc(100% - var(--stub)) 0, #0000 98%, #000),
+    radial-gradient(circle var(--notch) at calc(100% - var(--stub)) 100%, #0000 98%, #000);
+  mask-composite: intersect;
+  scroll-margin: 24px;
+}
+.ticket-main {
+  min-width: 0;
+  padding: 16px 18px;
+  background: var(--tint);
+  border-radius: 12px 0 0 12px;
+}
+.ticket h3 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+.ticket-summary {
+  margin: 6px 0 0;
+  line-height: 1.35;
+  font-size: 14px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.ticket dl {
+  margin-top: 10px;
+}
+.ticket dl div {
+  padding: 5px 0;
+  font-size: 13px;
+  border-color: rgb(21 19 15 / 0.1);
+}
+.ticket dl div:last-child {
+  border-bottom: 0;
+}
+.ticket .primary,
+.ticket .secondary {
+  min-height: 40px;
+  font-size: 14px;
+}
+.ticket > .ticket-main > .primary {
+  margin-top: 10px;
+}
+.proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.proposal-actions p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ticket .alert {
+  margin-top: 10px;
+}
+.ticket-stub {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 14px;
+  overflow: hidden;
+  font-size: 13px;
+  background: var(--idle);
+  border-left: 2px dashed var(--paper);
+  border-radius: 0 12px 12px 0;
+}
+.ticket-stub strong {
+  font-size: 15px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.ticket-no {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+.ticket-stub time {
+  margin-top: auto;
+}
+.ticket-working .ticket-stub {
+  background: var(--working);
+}
+.ticket-waiting .ticket-stub {
+  background: var(--waiting);
+}
+.ticket-done .ticket-stub {
+  background: var(--done);
+}
+.ticket-failed .ticket-stub {
+  background: var(--failed);
+}
+.ticket-open .ticket-main {
+  background: #e9e7e0;
+}
+.ticket-stamp {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 2px 7px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  transform: rotate(-8deg);
+  opacity: 0.75;
+}
+@media (max-width: 560px) {
+  .ticket {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 96px;
+    mask-image:
+      radial-gradient(circle var(--notch) at 0 calc(100% - 96px), #0000 98%, #000),
+      radial-gradient(circle var(--notch) at 100% calc(100% - 96px), #0000 98%, #000);
+  }
+  .ticket-main {
+    border-radius: 12px 12px 0 0;
+  }
+  .ticket-stub {
+    border-top: 2px dashed var(--paper);
+    border-left: 0;
+    border-radius: 0 0 12px 12px;
+  }
+}

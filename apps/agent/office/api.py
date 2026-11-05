@@ -41,6 +41,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     conn = db.connect(db_path)
     app = FastAPI(title="Office agent")
     procurement_workflow.ensure_schema(conn)
+    agent.recover_interrupted(conn)
     mutation_lock = asyncio.Lock()
     app.state.conn = conn
     app.state.mutation_lock = mutation_lock
@@ -56,18 +57,18 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         return await agent.run(conn, task_id, text)
 
     @app.get("/api/health")
-    def health():
+    async def health():
         return {"ok": True, "model": config.MODEL, "orders": "simulated", "agent_provider": config.MODEL, "supplier_provider": "mock", "simulation": True}
 
     @app.get("/api/boards")
-    def boards():
+    async def boards():
         return {
             "boards": [b.__dict__ | {"modules": sorted(b.modules)} for b in config.BOARDS.values()],
             "people": [p.__dict__ for p in config.PEOPLE.values()],
         }
 
     @app.get("/api/state")
-    def state():
+    async def state():
         return {
             "tasks": [procurement_workflow.enrich_task(conn, db.task_view(t)) for t in db.rows(conn, "SELECT * FROM tasks ORDER BY created_at DESC LIMIT 100")],
             "orders": db.rows(conn, "SELECT * FROM orders ORDER BY created_at DESC"),
@@ -109,7 +110,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             raise HTTPException(409, str(e))
 
     @app.get("/api/alerts")
-    def alerts():
+    async def alerts():
         return procurement_workflow.list_alerts(conn)
 
     @app.post("/api/alerts/{alert_id}/acknowledge")
@@ -121,19 +122,19 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                 raise HTTPException(404, str(error))
 
     @app.post("/api/orders/{order_id}/delivered")
-    def delivered(order_id: str):
+    async def delivered(order_id: str):
         conn.execute("UPDATE orders SET status = 'delivered' WHERE id = ?", (order_id,))
         bus.publish("state.changed", {})
         return {"ok": True}
 
     @app.post("/api/tickets/{ticket_id}/resolve")
-    def resolve(ticket_id: str):
+    async def resolve(ticket_id: str):
         conn.execute("UPDATE tickets SET status = 'resolved' WHERE id = ?", (ticket_id,))
         bus.publish("state.changed", {})
         return {"ok": True}
 
     @app.get("/api/events")
-    def events():
+    async def events():
         return StreamingResponse(bus.subscribe(), media_type="text/event-stream")
 
     # --- Device bridge compatibility (apps/device/src/bridge.py) ---
@@ -181,7 +182,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             return result
 
     @app.get("/api/devices/{board_id}/command")
-    def device_command(board_id: str):
+    async def device_command(board_id: str):
         c = db.row(conn, "SELECT * FROM board_commands WHERE board_id = ?", board_id)
         return {"command": {"station_id": board_id, "text": c["text"], "color": c["color"]} if c else None}
 

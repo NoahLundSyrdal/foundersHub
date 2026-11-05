@@ -4,6 +4,7 @@ import * as THREE from "three";
 export function createOfficeScene(): {
   group: THREE.Group;
   hotspots: Record<"kitchen" | "bathroom" | "printer", THREE.Vector3>;
+  things: Map<string, THREE.Mesh[]>;
 } {
   const group = new THREE.Group();
   group.name = "Founders Hub · approximate architectural cutaway";
@@ -128,6 +129,22 @@ export function createOfficeScene(): {
     sphere(x, 1.06, z, 0.12, "leaf");
   }
 
+  // Everything built inside a section belongs to one clickable thing in the twin.
+  const things = new Map<string, THREE.Mesh[]>();
+  function thing(id: string, build: () => void) {
+    const start = group.children.length;
+    build();
+    const meshes = things.get(id) ?? [];
+    for (const child of group.children.slice(start)) {
+      child.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        object.userData.thingId = id;
+        meshes.push(object);
+      });
+    }
+    things.set(id, meshes);
+  }
+
   // Two connected public rooms, with a narrow rear cloakroom and WC extension.
   box(-4.5, -0.22, 0.5, 11.4, 0.44, 13.5, "slab");
   box(5.5, -0.22, 2.1, 8.6, 0.44, 10.3, "slab");
@@ -175,123 +192,146 @@ export function createOfficeScene(): {
     box(x, 2.87, -3.85, 1.6, 0.055, 0.11, "glow");
   }
   // Event hall: six rows of burgundy chairs with a central circulation aisle.
-  for (let row = 0; row < 5; row++) {
-    for (const x of [-8.7, -7.85, -7.0, -5.55, -4.7, -3.85]) chair(x, 1.5 + row * 1.03, Math.PI);
-  }
+  thing("event-hall", () => {
+    for (let row = 0; row < 5; row++) {
+      for (const x of [-8.7, -7.85, -7.0, -5.55, -4.7, -3.85]) chair(x, 1.5 + row * 1.03, Math.PI);
+    }
+  });
   // The worktables visible behind the audience seating.
-  table(-7.7, -3.25);
-  table(-3.8, -3.25);
-  table(-2.4, -0.2);
+  thing("workspace", () => {
+    table(-7.7, -3.25);
+    table(-3.8, -3.25);
+    table(-2.4, -0.2);
+  });
   // Small presentation wall and low stage at the front of the main hall.
-  box(-5.65, 0.07, 6.7, 5.7, 0.12, 0.55, "dark");
+  thing("event-hall", () => {
+    box(-5.65, 0.07, 6.7, 5.7, 0.12, 0.55, "dark");
+  });
   // Glass divider and open passage between main hall and café.
   box(1.15, 1.2, 4.9, 0.045, 2.4, 3.8, "glass");
   for (const z of [3, 6.8]) box(1.15, 1.22, z, 0.055, 2.44, 0.055, "dark");
   box(1.15, 2.43, 4.9, 0.055, 0.055, 3.85, "dark");
   // Café: four sociable tables, a soft perimeter bench and hanging globe lighting.
-  box(5.4, 0.045, 3.7, 7.7, 0.025, 6.3, "rug");
-  roundTable(3.25, 1.0);
-  roundTable(7.05, 1.0);
-  roundTable(3.25, 4.8);
-  roundTable(7.05, 4.8);
-  box(5.5, 0.42, 6.55, 6.2, 0.7, 0.75, "oakDark");
-  box(5.5, 0.83, 6.8, 6.2, 0.85, 0.2, "fabric");
-  for (const x of [2.85, 3.9, 4.95, 6, 7.05, 8.1]) box(x, 0.82, 6.45, 1, 0.16, 0.65, "fabric");
-  for (const [x, z] of [[3.25, 1.0], [7.05, 1.0], [3.25, 4.8], [7.05, 4.8]]) {
-    cylinder(x, 2.7, z, 0.015, 0.7, "dark");
-    sphere(x, 2.33, z, 0.19, "glow");
-  }
+  thing("cafe", () => {
+    box(5.4, 0.045, 3.7, 7.7, 0.025, 6.3, "rug");
+    roundTable(3.25, 1.0);
+    roundTable(7.05, 1.0);
+    roundTable(3.25, 4.8);
+    roundTable(7.05, 4.8);
+    box(5.5, 0.42, 6.55, 6.2, 0.7, 0.75, "oakDark");
+    box(5.5, 0.83, 6.8, 6.2, 0.85, 0.2, "fabric");
+    for (const x of [2.85, 3.9, 4.95, 6, 7.05, 8.1]) box(x, 0.82, 6.45, 1, 0.16, 0.65, "fabric");
+    for (const [x, z] of [[3.25, 1.0], [7.05, 1.0], [3.25, 4.8], [7.05, 4.8]]) {
+      cylinder(x, 2.7, z, 0.015, 0.7, "dark");
+      sphere(x, 2.33, z, 0.19, "glow");
+    }
+  });
   plant(1.8, 6.4, 1.2);
   plant(8.85, 6.2, 1.1);
   plant(8.85, -0.65, 0.9);
   plant(-9.3, 6.5, 0.85);
 
   // Oak service counter, shelf wall, coffee machine and sink from the reference.
-  box(6.0, 1.38, -2.6, 7.2, 2.75, 0.18, "wall");
-  box(5.85, 0.55, -2.05, 6.4, 1.1, 0.92, "oak");
-  box(5.85, 1.13, -2.04, 6.6, 0.12, 1.03, "oakDark");
-  for (const x of [3.2, 4.45, 5.7, 7, 8.35]) {
-    box(x, 0.56, -1.565, 0.025, 0.94, 0.018, "oakDark");
-    box(x + 0.12, 0.73, -1.54, 0.025, 0.2, 0.04, "dark");
-  }
-  for (const x of [3.7, 6.5, 8.5]) {
-    box(x, 1.98, -2.4, 0.075, 1.6, 0.42, "oak");
-  }
-  for (const y of [1.53, 2.15, 2.74]) box(7.5, y, -2.38, 2.1, 0.065, 0.43, "oakLight");
-  for (const y of [1.57, 2.19]) for (const x of [6.85, 7.15, 7.45, 7.75, 8.05]) {
-    cup(x, y, -2.3);
-    if (y > 2) cup(x, y + 0.14, -2.3);
-  }
-  box(5.25, 1.7, -1.98, 1.05, 1.05, 0.69, "steel");
-  box(5.25, 1.76, -1.615, 0.86, 0.83, 0.05, "black");
-  box(5.25, 1.94, -1.579, 0.34, 0.2, 0.018, "screen");
-  for (const y of [1.77, 1.65, 1.53]) sphere(5.5, y, -1.575, 0.027, "white");
-  box(5.14, 1.49, -1.52, 0.22, 0.08, 0.16, "steel");
-  box(5.25, 1.21, -1.52, 0.94, 0.07, 0.5, "dark");
-  cup(5.15, 1.25, -1.42);
-  cylinder(5.0, 2.26, -1.98, 0.23, 0.16, "dark");
-  cylinder(5.5, 2.26, -1.98, 0.23, 0.16, "dark");
-  box(7.44, 1.202, -1.92, 0.92, 0.04, 0.62, "steel");
-  box(7.44, 1.225, -1.92, 0.73, 0.018, 0.46, "dark");
-  cylinder(7.65, 1.44, -2.15, 0.025, 0.45, "steel");
-  const spout = cylinder(7.65, 1.66, -2.01, 0.025, 0.28, "steel");
-  spout.rotation.x = Math.PI / 2;
+  thing("counter", () => {
+    box(6.0, 1.38, -2.6, 7.2, 2.75, 0.18, "wall");
+    box(5.85, 0.55, -2.05, 6.4, 1.1, 0.92, "oak");
+    box(5.85, 1.13, -2.04, 6.6, 0.12, 1.03, "oakDark");
+    for (const x of [3.2, 4.45, 5.7, 7, 8.35]) {
+      box(x, 0.56, -1.565, 0.025, 0.94, 0.018, "oakDark");
+      box(x + 0.12, 0.73, -1.54, 0.025, 0.2, 0.04, "dark");
+    }
+    for (const x of [3.7, 6.5, 8.5]) {
+      box(x, 1.98, -2.4, 0.075, 1.6, 0.42, "oak");
+    }
+    for (const y of [1.53, 2.15, 2.74]) box(7.5, y, -2.38, 2.1, 0.065, 0.43, "oakLight");
+    for (const y of [1.57, 2.19]) for (const x of [6.85, 7.15, 7.45, 7.75, 8.05]) {
+      cup(x, y, -2.3);
+      if (y > 2) cup(x, y + 0.14, -2.3);
+    }
+  });
+  thing("coffee-machine", () => {
+    box(5.25, 1.7, -1.98, 1.05, 1.05, 0.69, "steel");
+    box(5.25, 1.76, -1.615, 0.86, 0.83, 0.05, "black");
+    box(5.25, 1.94, -1.579, 0.34, 0.2, 0.018, "screen");
+    for (const y of [1.77, 1.65, 1.53]) sphere(5.5, y, -1.575, 0.027, "white");
+    box(5.14, 1.49, -1.52, 0.22, 0.08, 0.16, "steel");
+    box(5.25, 1.21, -1.52, 0.94, 0.07, 0.5, "dark");
+    cup(5.15, 1.25, -1.42);
+    cylinder(5.0, 2.26, -1.98, 0.23, 0.16, "dark");
+    cylinder(5.5, 2.26, -1.98, 0.23, 0.16, "dark");
+  });
+  thing("counter", () => {
+    box(7.44, 1.202, -1.92, 0.92, 0.04, 0.62, "steel");
+    box(7.44, 1.225, -1.92, 0.73, 0.018, 0.46, "dark");
+    cylinder(7.65, 1.44, -2.15, 0.025, 0.45, "steel");
+    const spout = cylinder(7.65, 1.66, -2.01, 0.025, 0.28, "steel");
+    spout.rotation.x = Math.PI / 2;
+  });
   // Small drinks fridge at the end of the counter.
-  box(2.1, 0.65, -2.1, 0.8, 1.3, 0.8, "dark");
-  box(2.1, 0.7, -1.69, 0.67, 1.04, 0.03, "glass");
-  for (const y of [0.35, 0.7, 1.05]) {
-    box(2.1, y - 0.09, -2.05, 0.68, 0.025, 0.6, "steel");
-    for (const x of [1.9, 2.1, 2.3]) cylinder(x, y, -1.93, 0.056, 0.18, "burgundy");
-  }
+  thing("fridge", () => {
+    box(2.1, 0.65, -2.1, 0.8, 1.3, 0.8, "dark");
+    box(2.1, 0.7, -1.69, 0.67, 1.04, 0.03, "glass");
+    for (const y of [0.35, 0.7, 1.05]) {
+      box(2.1, y - 0.09, -2.05, 0.68, 0.025, 0.6, "steel");
+      for (const x of [1.9, 2.1, 2.3]) cylinder(x, y, -1.93, 0.056, 0.18, "burgundy");
+    }
+  });
   // Cloakroom and two inferred WC cubicles. Open doors keep the circulation legible.
-  box(4.55, 0.62, -5.1, 0.15, 1.24, 3.9, "wall");
-  box(7.1, 0.62, -5.7, 0.12, 1.24, 2.7, "wall");
-  box(9.7, 0.62, -5.1, 0.16, 1.24, 3.9, "wall");
-  box(7.1, 0.62, -3.15, 5.3, 1.24, 0.15, "wall");
-  for (const x of [5.75, 8.45]) {
-    box(x, 0.041, -5.2, 2.4, 0.05, 3.55, "trim");
-    // Cistern, bowl, seat and compact wall basin.
-    box(x, 0.72, -6.65, 0.55, 0.65, 0.23, "white");
-    const bowl = sphere(x, 0.36, -6.15, 0.34, "white");
-    bowl.scale.set(0.29, 0.26, 0.43);
-    cylinder(x, 0.15, -6.25, 0.16, 0.3, "white");
-    const seat = cylinder(x, 0.56, -6.1, 0.29, 0.055, "white");
-    seat.scale.z = 0.38;
-    const opening = cylinder(x, 0.591, -6.1, 0.18, 0.008, "dark");
-    opening.scale.z = 0.26;
-    box(x + 0.65, 0.83, -4.45, 0.6, 0.15, 0.46, "white");
-    cylinder(x + 0.65, 1.02, -4.56, 0.022, 0.24, "steel");
-    box(x + 0.65, 1.45, -4.7, 0.58, 0.65, 0.035, "steel");
-    const door = furniture(x - 0.7, -3.2, -Math.PI / 3);
-    box(0, 0.57, -0.46, 0.06, 1.14, 0.92, "dark", door);
-    sphere(0.065, 0.63, -0.75, 0.035, "steel", door);
-  }
+  thing("bathroom", () => {
+    box(4.55, 0.62, -5.1, 0.15, 1.24, 3.9, "wall");
+    box(7.1, 0.62, -5.7, 0.12, 1.24, 2.7, "wall");
+    box(9.7, 0.62, -5.1, 0.16, 1.24, 3.9, "wall");
+    box(7.1, 0.62, -3.15, 5.3, 1.24, 0.15, "wall");
+    for (const x of [5.75, 8.45]) {
+      box(x, 0.041, -5.2, 2.4, 0.05, 3.55, "trim");
+      // Cistern, bowl, seat and compact wall basin.
+      box(x, 0.72, -6.65, 0.55, 0.65, 0.23, "white");
+      const bowl = sphere(x, 0.36, -6.15, 0.34, "white");
+      bowl.scale.set(0.29, 0.26, 0.43);
+      cylinder(x, 0.15, -6.25, 0.16, 0.3, "white");
+      const seat = cylinder(x, 0.56, -6.1, 0.29, 0.055, "white");
+      seat.scale.z = 0.38;
+      const opening = cylinder(x, 0.591, -6.1, 0.18, 0.008, "dark");
+      opening.scale.z = 0.26;
+      box(x + 0.65, 0.83, -4.45, 0.6, 0.15, 0.46, "white");
+      cylinder(x + 0.65, 1.02, -4.56, 0.022, 0.24, "steel");
+      box(x + 0.65, 1.45, -4.7, 0.58, 0.65, 0.035, "steel");
+      const door = furniture(x - 0.7, -3.2, -Math.PI / 3);
+      box(0, 0.57, -0.46, 0.06, 1.14, 0.92, "dark", door);
+      sphere(0.065, 0.63, -0.75, 0.035, "steel", door);
+    }
+  });
   // Coat rails with a few anonymous hanging garments.
-  for (const z of [-5.65, -3.85]) {
-    for (const x of [1.6, 3.6]) {
-      cylinder(x, 1.05, z, 0.022, 2.1, "steel");
-      box(x, 0.06, z, 0.32, 0.06, 0.5, "steel");
+  thing("cloakroom", () => {
+    for (const z of [-5.65, -3.85]) {
+      for (const x of [1.6, 3.6]) {
+        cylinder(x, 1.05, z, 0.022, 2.1, "steel");
+        box(x, 0.06, z, 0.32, 0.06, 0.5, "steel");
+      }
+      const rail = cylinder(2.6, 2.1, z, 0.026, 2.05, "steel");
+      rail.rotation.z = Math.PI / 2;
+      for (let index = 0; index < 7; index++) {
+        const x = 1.85 + index * 0.23;
+        cylinder(x, 1.99, z, 0.012, 0.18, "steel");
+        box(x, 1.47, z, 0.16, 0.94, 0.38, index % 3 ? "dark" : "black");
+        sphere(x, 1.93, z, 0.12, "dark");
+      }
     }
-    const rail = cylinder(2.6, 2.1, z, 0.026, 2.05, "steel");
-    rail.rotation.z = Math.PI / 2;
-    for (let index = 0; index < 7; index++) {
-      const x = 1.85 + index * 0.23;
-      cylinder(x, 1.99, z, 0.012, 0.18, "steel");
-      box(x, 1.47, z, 0.16, 0.94, 0.38, index % 3 ? "dark" : "black");
-      sphere(x, 1.93, z, 0.12, "dark");
-    }
-  }
+  });
   // Printer is a deliberately illustrative placement in the connecting passage.
-  box(0.55, 0.39, -2.4, 0.9, 0.78, 0.75, "oak");
-  box(0.55, 0.99, -2.4, 0.83, 0.43, 0.67, "white");
-  box(0.55, 1.23, -2.47, 0.85, 0.08, 0.7, "dark");
-  box(0.55, 1.28, -2.49, 0.65, 0.025, 0.48, "white");
-  box(0.55, 0.95, -2.05, 0.58, 0.09, 0.03, "dark");
-  box(0.77, 1.15, -2.04, 0.18, 0.1, 0.025, "screen");
+  thing("printer", () => {
+    box(0.55, 0.39, -2.4, 0.9, 0.78, 0.75, "oak");
+    box(0.55, 0.99, -2.4, 0.83, 0.43, 0.67, "white");
+    box(0.55, 1.23, -2.47, 0.85, 0.08, 0.7, "dark");
+    box(0.55, 1.28, -2.49, 0.65, 0.025, 0.48, "white");
+    box(0.55, 0.95, -2.05, 0.58, 0.09, 0.03, "dark");
+    box(0.77, 1.15, -2.04, 0.18, 0.1, 0.025, "screen");
+  });
   plant(-0.5, -5.3, 0.9);
 
   return {
     group,
+    things,
     hotspots: {
       kitchen: new THREE.Vector3(5.25, 2.9, -1.85),
       bathroom: new THREE.Vector3(7.15, 2.0, -5.35),
