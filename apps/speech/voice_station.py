@@ -1,37 +1,49 @@
 #!/usr/bin/env python3
 """Voice station on the physical Atech board (office_station firmware).
 
-Press the board button → speak into the laptop mic → press again (or go quiet)
-→ ElevenLabs/Whisper transcribes → the answer is shown on the board's screen and
-spoken through the board's speaker.
+Press the board button → speak into the BOARD microphone → press again (auto-stop after 15 s)
+→ the clip goes to the office agent (POST /api/input with audio): ElevenLabs transcription and
+speaker identification run in parallel on the server, then the agent answers → the agent's reply is
+shown on the board's screen and spoken through the board's speaker.
 
-- Air/temperature/CO2 questions are answered from the board's LIVE readings
-  (co2_co2, aht20_temperature, aht20_humidity), in the speaker's language.
-- Anything else is posted to the office API as a speech_transcript event.
+- A follow-up within 3 minutes continues the same conversation (conversation_id); the server refuses
+  that when the request already has an action, and the station then starts a new one.
+- `--mic laptop` records from the laptop microphone instead (e.g. firmware without a microphone).
+- Physical `co2_co2` / `aht20_*` samples are forwarded to POST /api/telemetry; sound actions from
+  /api/devices/kitchen/actions are played and acknowledged.
 
-Holds the board's serial port while running (stop the bridge first).
+Holds the board's serial port while running (stop the bridge and record_voice.py first).
 
-    apps/speech/.venv/bin/python apps/speech/voice_station.py [--port /dev/cu.usbmodem…] [--api http://127.0.0.1:3001]
+    apps/speech/.venv/bin/python apps/speech/voice_station.py [--port /dev/ttyACM0] [--api http://127.0.0.1:3001]
 """
 from __future__ import annotations
 
 import argparse
 import base64
-from datetime import datetime, timezone
+import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import uuid
 import wave
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from stt import SpeechToText, air_summary, answer_language, is_air_question, post_transcript  # noqa: E402
+from stt import _load_env_key, _wav_bytes, answer_language  # noqa: E402
 
 GREEN, AMBER, RED, BLUE, OFF = ({"r": 0, "g": 180, "b": 0}, {"r": 255, "g": 120, "b": 0},
                                 {"r": 255, "g": 0, "b": 0}, {"r": 0, "g": 0, "b": 255}, {"r": 0, "g": 0, "b": 0})
 PCM_CHUNK = 2250  # bytes per speaker_play_pcm action (~3000 base64 chars, the firmware's limit)
+LEDS = {"green": GREEN, "amber": AMBER, "red": RED, "blue": BLUE}
+CONTINUE_SECONDS = 180  # a follow-up within this window continues the conversation
+MIN_SECONDS = 0.4  # shorter takes are treated as an accidental double press
 
 
 def loud(pcm: bytes, thr_db: float = -38.0, ratio: float = 12.0, peak: float = 0.97, drive: float = 1.6) -> bytes:
@@ -70,13 +82,25 @@ def screen_text(text: str) -> str:
     return text.encode("ascii", "ignore").decode()[:180]
 
 
+def compress(wav: bytes) -> tuple[bytes, str]:
+    """Opus in Ogg (~10x smaller than WAV) when ffmpeg exists: the server forwards the clip to the
+    transcription and speaker-ID services, so a slow uplink pays for every byte twice."""
+    if not shutil.which("ffmpeg"):
+        return wav, "wav"
+    out = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", "pipe:0", "-c:a", "libopus",
+                          "-b:a", "32k", "-f", "ogg", "pipe:1"], input=wav, capture_output=True)
+    return (out.stdout, "ogg") if out.returncode == 0 and out.stdout else (wav, "wav")
+
+
 class Station:
-    def __init__(self, board, stt: SpeechToText, api: str):
-        self.board, self.stt, self.api = board, stt, api
+    def __init__(self, board, api: str, mic=None, stt=None):
+        self.board, self.api = board, api
+        self.mic, self.stt = mic, stt  # board microphone (board_mic.BoardMic), else the laptop mic via stt
         self.lock = threading.Lock()  # one action at a time on the serial link
         self.press = threading.Event()
-        self.pending: tuple[str, float] | None = None  # (request id, when) of an open clarification question
+        self.conversation: tuple[str, float] | None = None  # (request id, when) to continue
         self.volume = 0.85
+        self.eleven_key = _load_env_key("ELEVENLABS_API_KEY")
 
     def call(self, key, value="", timeout=3.0):
         with self.lock:
@@ -94,41 +118,34 @@ class Station:
         self.call("speaker_play_rtttl", tune)
 
     def say(self, text: str, lang: str):
-        """TTS on the laptop (macOS say), streamed as 16 kHz PCM to the board speaker."""
+        """Speak on the board speaker: ElevenLabs TTS as 16 kHz PCM, else macOS `say`."""
+        try:
+            pcm = self._tts_elevenlabs(text) if self.eleven_key else self._tts_say(text, lang)
+        except Exception as exc:
+            print(f"  ! TTS: {exc}", file=sys.stderr)
+            return
+        pcm = loud(pcm)
+        for i in range(0, len(pcm), PCM_CHUNK):
+            self.call("speaker_play_pcm", base64.b64encode(pcm[i:i + PCM_CHUNK]).decode(), timeout=5)
+
+    def _tts_elevenlabs(self, text: str) -> bytes:
+        voice = os.environ.get("ELEVENLABS_TTS_VOICE", "EXAVITQu4vr4xnSDxMaL")  # multilingual premade voice
+        model = os.environ.get("ELEVENLABS_TTS_MODEL", "eleven_flash_v2_5")  # low latency, includes Norwegian
+        req = Request(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=pcm_16000",
+                      data=json.dumps({"text": text, "model_id": model}).encode(), method="POST",
+                      headers={"xi-api-key": self.eleven_key, "Content-Type": "application/json"})
+        with urlopen(req, timeout=30) as r:
+            return r.read()  # raw 16 kHz mono int16 LE
+
+    def _tts_say(self, text: str, lang: str) -> bytes:
+        if not shutil.which("say"):
+            raise RuntimeError("no TTS: set ELEVENLABS_API_KEY (macOS `say` is not available here)")
         with tempfile.TemporaryDirectory() as d:
             wav = Path(d) / "tts.wav"
             voice = ["-v", "Nora", "-r", "165"] if lang == "no" else ["-v", "Samantha", "-r", "165"]
             subprocess.run(["say", *voice, "--data-format=LEI16@16000", "-o", str(wav), text], check=True)
             with wave.open(str(wav)) as w:
-                pcm = w.readframes(w.getnframes())
-        pcm = loud(pcm)
-        for i in range(0, len(pcm), PCM_CHUNK):
-            self.call("speaker_play_pcm", base64.b64encode(pcm[i:i + PCM_CHUNK]).decode(), timeout=5)
-
-    def live_air(self) -> dict:
-        """Same shape as GET /api/air-quality, built from the board's latest events."""
-        now = datetime.now(timezone.utc).isoformat()
-        def reading(key):
-            ev = self.board.latest(key)
-            return {"value": float(ev.value), "received_at": now} if ev is not None else None
-        r = {"temperature_c": reading("aht20_temperature") or reading("co2_temperature"),
-             "humidity_pct": reading("aht20_humidity") or reading("co2_humidity"),
-             "co2_ppm": reading("co2_co2")}
-        level, en = "good", []
-        t, h, c = (r[k]["value"] if r[k] else None for k in ("temperature_c", "humidity_pct", "co2_ppm"))
-        if c is not None and c > 1500 or t is not None and (t > 26 or t < 17): level = "poor"
-        elif (c is not None and c > 1000) or (t is not None and (t > 24 or t < 19)) or (h is not None and (h < 25 or h > 60)):
-            level = "moderate"
-        if not any(r.values()):
-            level = "unknown"
-        parts = [f"{t:.1f} °C" if t is not None else None, f"{h:.0f} % humidity" if h is not None else None,
-                 f"CO2 {c:.0f} ppm" if c is not None else None]
-        verdict = {"good": "Air quality is good", "moderate": "Air quality is OK but not ideal",
-                   "poor": "Air quality is poor", "unknown": "No readings yet"}[level]
-        if c is not None and c > 1000: en.append("open a window")
-        if t is not None and t > 24: en.append("it is too warm")
-        summary = f"{verdict}: {', '.join(p for p in parts if p)}." + (f" Tip: {' and '.join(en)}." if en else "")
-        return {"level": level, "readings": r, "summary": summary, "stale": False}
+                return w.readframes(w.getnframes())
 
     TELEMETRY = ("co2_co2", "aht20_temperature", "aht20_humidity")
 
@@ -137,7 +154,7 @@ class Station:
         last: dict[str, float] = {}
         for ev in self.board.events(keys=["btn_kitchen", *self.TELEMETRY]):
             if ev.key == "btn_kitchen":
-                if ev.value in (1, True):
+                if ev.value in (1, True) and self.mic is None:  # the board mic handles its own presses
                     self.press.set()
                 continue
             now = time.time()
@@ -150,17 +167,21 @@ class Station:
                     "timestamp": stamp.isoformat().replace("+00:00", "Z"), "simulation": False}
             threading.Thread(target=self._post, args=("/api/telemetry", body), daemon=True).start()
 
-    def _post(self, path: str, body: dict):
-        import json
-        from urllib.request import Request, urlopen
+    def _post(self, path: str, body: dict, timeout: float = 5):
+        return self._request(path, body, timeout)[1]
+
+    def _request(self, path: str, body: dict, timeout: float = 5) -> tuple[int, dict | None]:
+        req = Request(self.api.rstrip("/") + path, data=json.dumps(body).encode(), method="POST",
+                      headers={"Content-Type": "application/json"})
         try:
-            req = Request(self.api.rstrip("/") + path, data=json.dumps(body).encode(), method="POST",
-                          headers={"Content-Type": "application/json"})
-            with urlopen(req, timeout=5) as r:
-                return json.load(r)
+            with urlopen(req, timeout=timeout) as r:
+                return r.status, json.load(r)
+        except HTTPError as exc:
+            print(f"  ! POST {path}: HTTP {exc.code} {exc.read()[:200]!r}", file=sys.stderr)
+            return exc.code, None
         except Exception as exc:
             print(f"  ! POST {path}: {exc}", file=sys.stderr)
-            return None
+            return 0, None
 
     def deliver_actions(self):
         """Claim backend station actions (e.g. CO₂ alarm sound) and play them; ack only after the board confirms."""
@@ -181,45 +202,62 @@ class Station:
                                {"status": "failed", "detail": str(exc)[:400]})
             time.sleep(1.5)
 
+    def listen(self) -> bytes | None:
+        """One push-to-talk take as WAV bytes (None if nothing usable was recorded)."""
+        if self.mic is None:  # laptop microphone
+            self.press.wait()
+            self.press.clear()
+            self.show("Lytter... trykk igjen naar du er ferdig", RED)
+            self.beep()
+            audio = self.stt.record(stop="silence", max_seconds=10, silence_seconds=1.5, stop_event=self.press)
+            self.press.clear()
+            return _wav_bytes(audio) if len(audio) / 16000 >= MIN_SECONDS else None
+        self.mic.started.wait()  # the firmware lights red itself; no beep, it would be recorded
+        self.mic.started.clear()
+        self.call("office_say", screen_text("Lytter... trykk igjen naar du er ferdig"))
+        take = self.mic.next_take(timeout=20)
+        if take is None:  # stop line lost: end the recording on the board, then wait for its flush
+            self.call("office_mic", "stop")
+            take = self.mic.next_take(timeout=3)
+        if take is None:
+            return None
+        rms, peak = take.levels()
+        warn = take.warnings()
+        print(f"🎙  {take.seconds:.1f} s, rms {rms:.0f}, peak {peak}" + (f"  WARNING: {'; '.join(warn)}" if warn else ""))
+        return take.wav() if take.seconds >= MIN_SECONDS else None
+
+    def ask(self, wav: bytes) -> dict | None:
+        """Send the clip to the agent; continue the recent conversation when the server allows it."""
+        audio, kind = compress(wav)
+        body = {"board_id": "kitchen", "audio_b64": base64.b64encode(audio).decode()}
+        recent = self.conversation if self.conversation and time.time() - self.conversation[1] < CONTINUE_SECONDS else None
+        print(f"  → agent: {len(audio) // 1024} KB {kind}" + (f", continuing {recent[0]}" if recent else ""))
+        status, res = self._request("/api/input", body | {"event_id": uuid.uuid4().hex}
+                                    | ({"conversation_id": recent[0]} if recent else {}), timeout=90)
+        if status == 409 and recent:  # that request already has an action: start a new conversation
+            status, res = self._request("/api/input", body | {"event_id": uuid.uuid4().hex}, timeout=90)
+        return res
+
     def handle_one(self):
-        self.press.clear()
-        self.show("Lytter... trykk igjen naar du er ferdig", RED)
-        self.beep()
-        audio = self.stt.record(stop="silence", max_seconds=10, silence_seconds=1.5, stop_event=self.press)
-        self.press.clear()
-        self.show("Tenker...", AMBER)
-        text = self.stt.transcribe(audio)
-        lang = answer_language(text, getattr(self.stt, "last_language", None)) if text else "no"
-        print(f"📝 [{lang}] {text or '(nothing heard)'}")
-        if not text:
-            answer = "Jeg hørte ingenting. Prøv igjen." if lang == "no" else "I didn't hear anything. Try again."
-        elif is_air_question(text):
-            aq = self.live_air()
-            answer = air_summary(aq, lang)
+        wav = self.listen()
+        if wav is None:
+            answer, color, lang = "Jeg hørte ingenting. Prøv igjen.", "amber", "no"
         else:
-            try:
-                pending = self.pending if self.pending and time.time() - self.pending[1] < 180 else None
-                if pending:  # the agent asked a question: this utterance is the answer, not a new case
-                    res = self._post(f"/api/requests/{pending[0]}/transcript", {"text": text[:2000]}) or {}
-                else:
-                    res = post_transcript(self.api, "kitchen", text)
-                print("  API:", str(res)[:300])
-                req = res.get("request") or res
-                status, summary = req.get("status"), req.get("summary", "")
-                self.pending = (req["id"], time.time()) if status == "needs_clarification" and req.get("id") else None
-                if lang == "no":
-                    answer = {"awaiting_approval": f"Jeg har laget et forslag: {summary}. Det venter på godkjenning.",
-                              "needs_clarification": f"Jeg trenger litt mer informasjon. {req.get('question') or ''}",
-                              }.get(status, f"Registrert: {summary}")
-                else:
-                    answer = {"awaiting_approval": f"I made a proposal: {summary}. It is waiting for approval.",
-                              "needs_clarification": f"I need a bit more information. {req.get('question') or ''}",
-                              }.get(status, f"Registered: {summary}")
-            except Exception as exc:
-                print(f"  ! API: {exc}", file=sys.stderr)
-                answer = "Jeg fikk ikke kontakt med systemet." if lang == "no" else "I could not reach the system."
+            self.show("Tenker...", AMBER)
+            res = self.ask(wav)
+            if res is None:
+                answer, color, lang = "Jeg fikk ikke kontakt med systemet.", "red", "no"
+            else:
+                command = res.get("command") or {}
+                answer = res.get("reply") or command.get("text") or "Registrert."
+                color = command.get("color", "green")
+                lang = answer_language(answer, None)
+                who = (res.get("speaker") or {}).get("display_name")
+                print(f"📝 {res.get('prompt', '')!r}  (speaker: {who or 'unknown'}, status: {res.get('status')})")
+                done = res.get("status") in {"awaiting_approval", "failed"}
+                self.conversation = None if done or not res.get("id") else (res["id"], time.time())
         print(f"💬 {answer}")
-        self.show(answer, GREEN)
+        self.show(answer, LEDS.get(color, GREEN))
         self.say(answer, lang)
 
     def run(self):
@@ -227,11 +265,9 @@ class Station:
         threading.Thread(target=self.deliver_actions, daemon=True).start()
         self.call("speaker_set_volume", self.volume)
         self.show("Trykk paa knappen og snakk", BLUE)
-        print("Ready: press the board button to talk (Ctrl+C to quit).")
+        print(f"Ready ({'board' if self.mic else 'laptop'} microphone): press the board button to talk (Ctrl+C to quit).")
         while True:
-            self.press.wait()
             self.handle_one()
-            self.press.clear()
             self.call("led_kitchen_fill", BLUE)
 
 
@@ -239,16 +275,21 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--port", help="Board serial port (default: first Atech board found)")
     p.add_argument("--api", default="http://127.0.0.1:3001")
-    p.add_argument("--provider", choices=("auto", "elevenlabs", "whisper"), default="auto")
+    p.add_argument("--mic", choices=("board", "laptop"), default="board",
+                   help="board: the office_station firmware's microphone (default); laptop: the laptop mic")
     p.add_argument("--volume", type=float, default=0.85, help="Board speaker volume 0.0–1.0 (1.0 may distort)")
     args = p.parse_args()
-    from atech import Board
+    import board_mic
 
-    stt = SpeechToText(provider=args.provider)
-    print(f"STT provider: {stt.provider}", file=sys.stderr)
-    with Board.connect(port=args.port) if args.port else Board.connect() as board:
+    if args.mic == "board":
+        board, mic, stt = *board_mic.connect(args.port), None
+    else:
+        from atech import Board
+        from stt import SpeechToText
+        board, mic, stt = (Board.connect(port=args.port) if args.port else Board.connect()), None, SpeechToText()
+    with board:
         try:
-            station = Station(board, stt, args.api)
+            station = Station(board, args.api, mic=mic, stt=stt)
             station.volume = args.volume
             station.run()
         except KeyboardInterrupt:

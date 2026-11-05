@@ -1,0 +1,97 @@
+# TEMPORARY: voice-enrollment recorder. Not the office station; re-upload ../office_station when done.
+#
+# Layout for this build (2026-11-05): microphone on ports 5-6, light grid on 11, button on 3.
+# Screen, sensors and speaker are left out (the speaker would beep into the recording).
+#
+# Press the button to start recording; press again to stop. While recording, the light grid and the
+# button light are red, and the board streams 16 kHz mono int16 PCM over USB as JSON lines:
+#   {"type":"rec","state":"start"}
+#   {"type":"audio","d":"<base64 of little-endian int16 samples>"}
+#   {"type":"rec","state":"stop","dropped":<samples lost to a full ring buffer>}
+# apps/device/src/record_voice.py turns those into WAV files.
+name: voice_record
+board: 14port
+modules:
+  - {id: button,     instance: btn, port: 3}
+  - {id: neopixel,   instance: led, port: 11}
+  - {id: microphone, instance: mic, ports: [5, 6]}
+feedback: false
+code:
+  globals: |
+    #include "mbedtls/base64.h"
+    // Single producer (mic capture task, core 0), single consumer (loop). 1 s of headroom.
+    static const uint32_t RING = 16384;
+    static int16_t ring[RING];
+    static volatile uint32_t ringHead = 0, ringTail = 0, ringDropped = 0;
+    static volatile bool capturing = false;
+
+    void onMic(const int16_t* s, int n, void*) {
+      if (!capturing) return;
+      for (int i = 0; i < n; i++) {
+        uint32_t next = (ringHead + 1) % RING;
+        if (next == ringTail) { ringDropped++; continue; }
+        ring[ringHead] = s[i];
+        ringHead = next;
+      }
+    }
+
+    // HWCDC write() sends only what fits in its 256-byte TX buffer and drops the rest without an
+    // error, so keep writing until everything is out (bounded so a closed port cannot hang us).
+    void writeAll(const char* p, size_t len) {
+      unsigned long t0 = millis();
+      while (len > 0 && millis() - t0 < 200) {
+        size_t n = Serial.write((const uint8_t*)p, len);
+        p += n; len -= n;
+        if (n == 0) delay(1);
+      }
+    }
+
+    void showState(bool on) {
+      if (on) { led.setAll(255, 0, 0); btn.setColor(255, 0, 0); }
+      else    { led.setAll(0, 40, 0);  btn.setColor(0, 255, 0); }
+      led.show();
+    }
+  setup: |
+    mic.onAudio(onMic, nullptr);
+    showState(false);
+  loop: |
+    static bool recording = false;
+    static bool pendingStop = false;
+    if (btn.wasPressed()) {
+      recording = !recording;
+      if (recording) {
+        ringTail = ringHead;
+        ringDropped = 0;
+        capturing = true;
+        pendingStop = false;
+        Serial.println("{\"type\":\"rec\",\"state\":\"start\"}");
+      } else {
+        capturing = false;
+        pendingStop = true;
+      }
+      showState(recording);
+    }
+    // Drain in 256-sample chunks; flush the remainder once recording has stopped.
+    static uint8_t raw[512];
+    static unsigned char b64[700];
+    while (true) {
+      uint32_t avail = (ringHead + RING - ringTail) % RING;
+      if (avail == 0 || (capturing && avail < 256)) break;
+      uint32_t n = avail < 256 ? avail : 256;
+      for (uint32_t i = 0; i < n; i++) {
+        int16_t v = ring[(ringTail + i) % RING];
+        raw[2 * i] = v & 0xff;
+        raw[2 * i + 1] = (v >> 8) & 0xff;
+      }
+      ringTail = (ringTail + n) % RING;
+      size_t olen = 0;
+      mbedtls_base64_encode(b64, sizeof(b64), &olen, raw, n * 2);
+      b64[olen] = 0;
+      static char line[720];
+      int len = snprintf(line, sizeof(line), "{\"type\":\"audio\",\"d\":\"%s\"}\n", (const char*)b64);
+      writeAll(line, len);
+    }
+    if (pendingStop && ringHead == ringTail) {
+      Serial.printf("{\"type\":\"rec\",\"state\":\"stop\",\"dropped\":%u}\n", (unsigned)ringDropped);
+      pendingStop = false;
+    }

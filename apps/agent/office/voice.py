@@ -15,8 +15,17 @@ from office.speaker import Speaker
 log = logging.getLogger(__name__)
 
 
-def transcribe(audio: bytes, filename: str = "audio.wav") -> str:
-    """Audio file bytes (wav/webm/m4a...) → text. ElevenLabs Scribe with ELEVENLABS_API_KEY, else OpenAI."""
+def _filename(audio: bytes) -> str:
+    """A name matching the container, so the provider decodes Ogg/WebM uploads correctly."""
+    for magic, name in ((b"OggS", "audio.ogg"), (b"\x1aE\xdf\xa3", "audio.webm"), (b"fLaC", "audio.flac"), (b"ID3", "audio.mp3")):
+        if audio.startswith(magic):
+            return name
+    return "audio.m4a" if audio[4:8] == b"ftyp" else "audio.wav"
+
+
+def transcribe(audio: bytes, filename: str | None = None) -> str:
+    """Audio file bytes (wav/ogg/webm/m4a...) → text. ElevenLabs Scribe with ELEVENLABS_API_KEY, else OpenAI."""
+    filename = filename or _filename(audio)
     if key := os.getenv("ELEVENLABS_API_KEY"):
         r = httpx.post(
             "https://api.elevenlabs.io/v1/speech-to-text",

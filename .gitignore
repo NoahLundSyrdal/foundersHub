@@ -10,3 +10,8 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 apps/device/firmware/*/build/
+
+# Voice-enrollment clips (biometric data)
+recordings/
+apps/device/build/
+*.egg-info/

@@ -1,28 +1,75 @@
 # Office station firmware: our 14-port board as the KITCHEN station (atech SDK). Owner: hardware.
-# Ports probed and verified 2026-11-05; see docs/hardware.md. If you move a module, update this and re-upload.
+# Port layout (2026-11-05): microphone 5-6 and light grid 11 as in ../voice_record, whose microphone capture
+# worked; the other modules as probed earlier (docs/hardware.md). This combined build has NOT been run on
+# the board yet. If you move a module, update this and re-upload.
 #   PATH=<venv>/bin:$PATH atech validate . && atech upload . && atech check
 #
-# Contract with apps/device/src/atech_bridge.py:
-#   events  btn_kitchen = 1 on press -> push-to-talk for the kitchen station
+# Contract with apps/speech/voice_station.py (and apps/device/src/atech_bridge.py):
+#   events  btn_kitchen = 1/0 on press/release (built in)
 #           aht20_temperature, aht20_humidity, distance_sensor_min_distance, co2_co2 (+ co2_temperature/humidity)
-#   actions led_kitchen_fill {"r","g","b"}, led_aux_fill, speaker_play_rtttl, speaker_play_pcm  (built in)
-#           office_say "<text>"   (custom, below: shows text on the screen)
+#   actions led_kitchen_fill {"r","g","b"}, speaker_play_rtttl, speaker_play_pcm, speaker_set_volume  (built in)
+#           office_say "<text>"   (custom: shows text on the screen)
+#           office_mic "stop"     (custom: ends a recording, e.g. after a host-side timeout)
+#
+# Push-to-talk on the board microphone: press the button to start, press again to stop (auto-stop after
+# 15 s). While recording, the light grid and the button light are red and the board streams 16 kHz mono
+# int16 PCM over USB as JSON lines, next to the atech protocol (the atech SDK ignores these lines):
+#   {"type":"rec","state":"start"}
+#   {"type":"audio","d":"<base64 of little-endian int16 samples>"}     256 samples per line
+#   {"type":"rec","state":"stop","dropped":<samples lost to a full ring buffer>}
+# apps/speech/board_mic.py and apps/device/src/record_voice.py read them.
 name: office_station
 board: 14port
 modules:
   - {id: speaker,           instance: speaker,         ports: [1, 2]}
   - {id: button,            instance: btn_kitchen,     port: 3}
   - {id: scd40_air_quality, instance: co2,             port: 4}
-  - {id: neopixel,          instance: led_aux,         port: 5}
-  - {id: neopixel,          instance: led_kitchen,     port: 6}
+  - {id: microphone,        instance: mic,             ports: [5, 6]}
   - {id: distance_sensor,   instance: distance_sensor, port: 9}
   - {id: aht20,             instance: aht20,           port: 10}
+  - {id: neopixel,          instance: led_kitchen,     port: 11}
   - {id: st7735_tft,        instance: tft,             ports: [13, 14]}
 code:
+  globals: |
+    #include "mbedtls/base64.h"
+    // Single producer (mic capture task, core 0), single consumer (loop). 1 s of headroom.
+    static const uint32_t RING = 16384;
+    static int16_t ring[RING];
+    static volatile uint32_t ringHead = 0, ringTail = 0, ringDropped = 0;
+    static volatile bool capturing = false;
+    static const unsigned long MAX_RECORDING_MS = 15000;
+
+    void onMic(const int16_t* s, int n, void*) {
+      if (!capturing) return;
+      for (int i = 0; i < n; i++) {
+        uint32_t next = (ringHead + 1) % RING;
+        if (next == ringTail) { ringDropped++; continue; }
+        ring[ringHead] = s[i];
+        ringHead = next;
+      }
+    }
+
+    // HWCDC write() sends only what fits in its 256-byte TX buffer and drops the rest without an
+    // error, so keep writing until everything is out (bounded so a closed port cannot hang us).
+    void writeAll(const char* p, size_t len) {
+      unsigned long t0 = millis();
+      while (len > 0 && millis() - t0 < 200) {
+        size_t n = Serial.write((const uint8_t*)p, len);
+        p += n; len -= n;
+        if (n == 0) delay(1);
+      }
+    }
+
+    void showRecording(bool on) {
+      if (on) { led_kitchen.setAll(255, 0, 0); btn_kitchen.setColor(255, 0, 0); }
+      else    { led_kitchen.setAll(255, 120, 0); btn_kitchen.setColor(0, 0, 0); }  // amber: thinking
+      led_kitchen.show();
+    }
   setup: |
     tft.clear();
     tft.displayText("Office agent", 4, 30, 2, ST7735_TFT::COLOR_WHITE);
     tft.display();
+    mic.onAudio(onMic, nullptr);
   loop: |
     if (atech_action == "office_say") {
       // 160x80 screen, size-1 font: 26 chars x 7 lines. Simple hard wrap.
@@ -40,4 +87,59 @@ code:
       }
       tft.display();
       atechDone();
+    }
+
+    // ---- push-to-talk on the board microphone ----
+    static bool recording = false;
+    static bool pendingStop = false;
+    static unsigned long recordingSince = 0;
+    bool stop = recording && millis() - recordingSince >= MAX_RECORDING_MS;
+    if (atech_action == "office_mic") {
+      stop = stop || (recording && atech_value == "stop");
+      atechDone();
+    }
+    if (btn_kitchen.wasPressed()) {
+      if (recording) stop = true;
+      else {
+        recording = true;
+        recordingSince = millis();
+        ringTail = ringHead;
+        ringDropped = 0;
+        capturing = true;
+        pendingStop = false;
+        static const char* START = "{\"type\":\"rec\",\"state\":\"start\"}\n";
+        writeAll(START, strlen(START));
+        showRecording(true);
+      }
+    }
+    if (stop) {
+      recording = false;
+      capturing = false;
+      pendingStop = true;
+      showRecording(false);
+    }
+    // Drain in 256-sample chunks; flush the remainder once recording has stopped.
+    static uint8_t raw[512];
+    static unsigned char b64[700];
+    static char line[720];
+    while (true) {
+      uint32_t avail = (ringHead + RING - ringTail) % RING;
+      if (avail == 0 || (capturing && avail < 256)) break;
+      uint32_t n = avail < 256 ? avail : 256;
+      for (uint32_t i = 0; i < n; i++) {
+        int16_t v = ring[(ringTail + i) % RING];
+        raw[2 * i] = v & 0xff;
+        raw[2 * i + 1] = (v >> 8) & 0xff;
+      }
+      ringTail = (ringTail + n) % RING;
+      size_t olen = 0;
+      mbedtls_base64_encode(b64, sizeof(b64), &olen, raw, n * 2);
+      b64[olen] = 0;
+      int len = snprintf(line, sizeof(line), "{\"type\":\"audio\",\"d\":\"%s\"}\n", (const char*)b64);
+      writeAll(line, len);
+    }
+    if (pendingStop && ringHead == ringTail) {
+      int len = snprintf(line, sizeof(line), "{\"type\":\"rec\",\"state\":\"stop\",\"dropped\":%u}\n", (unsigned)ringDropped);
+      writeAll(line, len);
+      pendingStop = false;
     }
