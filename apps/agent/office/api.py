@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import chat_api, facility_api, oda_food, oda_api, work_api
-from office import order_confirmations, whatsapp_delivery
+from office import alert_rules, order_confirmations, whatsapp_delivery
 from office.facility_rules import FacilityReading
 
 
@@ -64,6 +64,15 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         approvals = order_confirmations.OrderConfirmations(conn, mutation_lock, delivery,
             recipient=os.environ["OFFICE_ORDER_WHATSAPP_TO"], public_base_url=os.environ["OFFICE_ORDER_PUBLIC_URL"])
         delivery.validate_job = approvals.validate_job
+    if delivery is None and os.getenv("OFFICE_WHATSAPP_ALERTS", "1") != "0":
+        # Equipment alerts use the same local bridge even when WhatsApp order approval is not configured.
+        delivery = whatsapp_delivery.WhatsAppDelivery(conn, mutation_lock,
+            token_path=os.getenv("OFFICE_WHATSAPP_BRIDGE_TOKEN_PATH", str(config.ROOT / ".data/whatsapp/bridge-token")))
+    alert_service = alert_rules.AlertRules(conn, mutation_lock, delivery)
+    if delivery is not None:
+        order_check = delivery.validate_job
+        delivery.validate_job = lambda job: (alert_service._validate(job) if str(job.get("execution_id", "")).startswith("alert-")
+                                             else bool(order_check and order_check(job)))
 
     @asynccontextmanager
     async def lifespan(app):
@@ -76,7 +85,10 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             work.tick()
         monitor = asyncio.create_task(facilities.watch())
         work_monitor = asyncio.create_task(work.watch())
-        approval_monitors = [asyncio.create_task(approvals.watch()), asyncio.create_task(delivery.watch())] if approvals else []
+        approval_monitors = [asyncio.create_task(approvals.watch())] if approvals else []
+        if delivery is not None:
+            approval_monitors.append(asyncio.create_task(delivery.watch()))
+        approval_monitors.append(asyncio.create_task(alert_service.watch()))
         try:
             yield
         finally:
@@ -105,9 +117,11 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
     app.include_router(chat_api.router(conn, mutation_lock))
-    if approvals:
+    if delivery is not None:
         app.include_router(whatsapp_delivery.router(delivery))
+    if approvals:
         app.include_router(order_confirmations.router(approvals))
+    app.include_router(alert_rules.router(alert_service))
 
     def board_or_404(board_id: str) -> config.Board:
         if board_id not in config.BOARDS:
