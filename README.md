@@ -6,6 +6,8 @@ A local hackathon foundation for an office assistant that receives requests from
 
 ## Start locally
 
+For feedback-driven improvements, the **Improve** tab sends reviewed text to hosted Claude, which opens a tested draft PR. The demo Mac runs only the app and an updater for explicitly approved revisions. See [cloud development setup](docs/self-improvement.md) and [local updater setup](docs/local-demo-updater.md).
+
 Requirements: Node.js **22.13 or newer**, npm, **Python 3.12+** and **uv**. The application backend is Python (FastAPI/Pydantic AI/SQLite); the frontend is React/TypeScript.
 
 ```sh
