@@ -1,0 +1,20 @@
+.alert-rules { display: grid; gap: 16px; max-width: 760px; }
+.alert-rules header { display: grid; gap: 4px; }
+.alert-rules header h2 { margin: 0; }
+.alert-rules header p { margin: 0; opacity: .75; }
+.alert-rules .wa-status { justify-self: start; font-size: .8rem; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; }
+.alert-rules .wa-status.on { color: #1a7f37; }
+.alert-rules .wa-status.off { color: #9a6700; }
+.alert-rules .muted { opacity: .65; font-size: .85rem; }
+.alert-rules .rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.alert-rules .rule-list li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid rgba(0,0,0,.12); border-radius: 10px; }
+.alert-rules .rule-list li.disabled { opacity: .5; }
+.alert-rules .rule-list li.empty { justify-content: flex-start; opacity: .7; }
+.alert-rules .rule-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.alert-rules .rule-form { display: grid; gap: 8px; padding: 14px; border: 1px dashed rgba(0,0,0,.2); border-radius: 10px; }
+.alert-rules .rule-form h3, .alert-rules .sent-log h3 { margin: 0; font-size: 1rem; }
+.alert-rules .rule-form label { display: grid; gap: 4px; font-size: .85rem; }
+.alert-rules .rule-form input { padding: 8px 10px; border: 1px solid rgba(0,0,0,.2); border-radius: 8px; font: inherit; }
+.alert-rules .suggestions { display: flex; gap: 6px; flex-wrap: wrap; }
+.alert-rules .sent-log ul { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; font-size: .9rem; }
+@media (max-width: 600px) { .alert-rules .rule-list li { flex-direction: column; align-items: flex-start; } }

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import AlertRules from "./AlertRules";
+import "./alert-rules.css";
 import {
   proposalFingerprint,
   type DeviceEvent,
@@ -41,7 +43,7 @@ export function App() {
     [error, setError] = useState(""),
     [connectionError, setConnectionError] = useState(""),
     [streamConnected, setStreamConnected] = useState(false),
-    [view, setView] = useState<"twin" | "tickets" | "history" | "work">("twin"),
+    [view, setView] = useState<"twin" | "tickets" | "history" | "work" | "alerts">("twin"),
     [where, setWhere] = useState<Station["id"]>("kitchen"),
     [askCount, setAskCount] = useState(0),
     [openCount, setOpenCount] = useState(0);
@@ -234,6 +236,9 @@ export function App() {
           <button aria-pressed={view === "history"} onClick={() => setView("history")}>
             History
           </button>
+          <button aria-pressed={view === "alerts"} onClick={() => setView("alerts")}>
+            Alerts
+          </button>
         </nav>
         <ProcurementAlerts />
         {/* Stays mounted while hidden, so the camera and selection survive a look at a ticket. */}
@@ -260,6 +265,7 @@ export function App() {
           onRequest={openTicket}
         />
         {view === "work" && <WorkQueue onOpenRequest={openTicket} />}
+        {view === "alerts" && <AlertRules />}
         {view === "tickets" && (
           <TicketsView
             requests={requests}
