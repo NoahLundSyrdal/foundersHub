@@ -76,7 +76,7 @@ class WorkCreate(WorkInput):
 class WorkAction(WorkInput):
     event_key: Key
     expected_version: int = Field(ge=1, strict=True)
-    action: Literal["assign", "wait", "block", "resume", "cancel", "fail", "start_step", "complete_step", "simulate_step", "reconcile_step", "close"]
+    action: Literal["assign", "wait", "block", "resume", "cancel", "fail", "start_step", "complete_step", "simulate_step", "reconcile_step", "renew_approval", "close"]
     step_id: Key | None = None
     owner: Key | None = None
     reason: Text | None = None

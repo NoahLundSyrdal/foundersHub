@@ -1,5 +1,13 @@
 [
   {
+    "id": "office",
+    "location": "General",
+    "responsible_team": "Office team",
+    "equipment": [],
+    "modules": [],
+    "triggers": []
+  },
+  {
     "id": "kitchen",
     "location": "Kitchen",
     "responsible_team": "Facilities",

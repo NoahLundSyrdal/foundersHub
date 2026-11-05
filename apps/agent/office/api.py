@@ -14,13 +14,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
-from office import facility_api, oda_food, oda_api, work_api
+from office import chat_api, facility_api, oda_food, oda_api, work_api
 from office import alert_rules, order_confirmations, whatsapp_delivery
 from office.facility_rules import FacilityReading
 
 
 class Input(BaseModel):
-    board_id: str
+    board_id: str = "office"
     text: str | None = None
     audio_b64: str | None = None  # any format OpenAI transcription accepts
     person: str | None = None  # dashboard override / already-identified speaker
@@ -116,6 +116,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.include_router(facility_api.router(facilities))
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
+    app.include_router(chat_api.router(conn, mutation_lock))
     if delivery is not None:
         app.include_router(whatsapp_delivery.router(delivery))
     if approvals:

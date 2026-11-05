@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { OfficeRequest, Station } from "@office/contracts";
-import { isOpen, isRecentChat, isTicket, money, requestTitle, stamp } from "./format";
+import { isTicket, money, requestTitle, stamp } from "./format";
 import { ProposalActions, type ProposalHandlers } from "./ProposalActions";
 import "./agent-chat.css";
 
-const VISIBLE_REQUESTS = 8;
 type Recognition = {
   lang: string;
   continuous: boolean;
@@ -26,7 +25,6 @@ type Props = {
   error: string;
   onWhere: (station: Station["id"]) => void;
   onSend: (text: string, station: Station["id"]) => Promise<boolean>;
-  onReply: (request: OfficeRequest, text: string) => Promise<boolean>;
   onOpenTicket: (id: string) => void;
 } & ProposalHandlers;
 // Only a guess to save a click. The person can still change the place before sending.
@@ -41,29 +39,19 @@ const SpeechRecognition =
   (window as unknown as { SpeechRecognition?: RecognitionConstructor }).SpeechRecognition ||
   (window as unknown as { webkitSpeechRecognition?: RecognitionConstructor }).webkitSpeechRecognition;
 
-export function AgentChat({ requests, stations, where, askCount, busy, offline, error, onWhere, onSend, onReply, onApprove, onReject, onRequote, onOpenTicket }: Props) {
+export function AgentChat({ requests, stations, where, askCount, busy, offline, error, onWhere, onSend, onApprove, onReject, onRequote, onOpenTicket }: Props) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState("");
   const [listening, setListening] = useState(false);
   const [speechError, setSpeechError] = useState("");
-  const [newTopic, setNewTopic] = useState<string | null>(null);
   const [opened, setOpened] = useState(false);
   const chosen = useRef(false);
   const thread = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const recognition = useRef<Recognition | null>(null);
   const ordered = [...requests].sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const visible = ordered.filter((r, index) => isOpen(r) || index >= ordered.length - VISIBLE_REQUESTS).slice(-VISIBLE_REQUESTS);
-  const latest = ordered.at(-1);
-  // A reply continues the latest request only when the agent is waiting for one.
-  const waiting =
-    latest &&
-    latest.id !== newTopic &&
-    ["awaiting_input", "needs_clarification"].includes(latest.status) &&
-    isRecentChat(latest)
-      ? latest
-      : undefined;
-  const needsReply = !!waiting || requests.some((r) => r.status === "awaiting_approval");
+  const visible = ordered;
+  const needsReply = requests.some((r) => r.status === "awaiting_approval");
   const stationName = (id: string) => stations.find((s) => s.id === id)?.name ?? id;
   const sendingShown = sending && !requests.some((r) => r.status === "processing");
   const threadKey = `${visible.map((r) => `${r.id}:${r.status}`).join()}|${sendingShown}`;
@@ -91,7 +79,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
   function change(next: string) {
     setText(next);
     const guess = guessStation(next);
-    if (guess && !chosen.current) onWhere(guess);
+    if (!chosen.current) onWhere(guess ?? "office");
   }
   async function submit() {
     const message = text.trim();
@@ -99,10 +87,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
     setText("");
     setSending(message);
     chosen.current = false;
-    // The backend keeps one prompt per request, so an answer carries its question's context.
-    const sent = waiting
-      ? await onReply(waiting, waiting.original_text ? `${waiting.original_text} ${message}`.slice(0, 2000) : message)
-      : await onSend(message, where);
+    const sent = await onSend(message, where);
     setSending("");
     // Nothing reached the server, so give the words back instead of making them retype it.
     if (!sent) setText((current) => current || message);
@@ -134,7 +119,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
         {opened ? "Close chat" : needsReply ? "Open chat · waiting for you" : "Open chat"}
       </button>
       <div className="chat-thread" ref={thread} aria-live="polite">
-        {visible.length === 0 && !sendingShown && <p className="chat-empty">Tell me what’s missing or broken.</p>}
+        {visible.length === 0 && !sendingShown && <p className="chat-empty">Ask a question or tell me what you need help with.</p>}
         {visible.map((request) => (
           <ChatTurn key={request.id} request={request} stationName={stationName(request.station_id)} busy={busy} onApprove={onApprove} onReject={onReject} onRequote={onRequote} onOpenTicket={onOpenTicket} />
         ))}
@@ -153,13 +138,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
           void submit();
         }}
       >
-        {waiting ? (
-          <p className="chat-replying">
-            Answering about {stationName(waiting.station_id)}
-            <button type="button" onClick={() => setNewTopic(waiting.id)}>New topic</button>
-          </p>
-        ) : (
-          <div className="chat-where" role="group" aria-label="Where is this about?">
+          <div className="chat-where" role="group" aria-label="Location context (any topic is welcome)">
             {stations.map((station) => (
               <button
                 key={station.id}
@@ -174,7 +153,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
               </button>
             ))}
           </div>
-        )}
+        <p className="hint">Any topic is welcome. Location adds context.</p>
         <label className="sr-only" htmlFor="chat-message">Message to the agent</label>
         <textarea
           id="chat-message"
@@ -182,7 +161,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
           rows={2}
           value={text}
           maxLength={2000}
-          placeholder={waiting ? "Type your answer" : "We’re out of coffee"}
+          placeholder="Ask about anything, or continue the conversation…"
           onChange={(event) => change(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {

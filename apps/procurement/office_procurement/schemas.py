@@ -1,8 +1,8 @@
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from .serialization import epoch
 
-StationId = Literal["kitchen", "bathroom", "printer"]
+StationId = Annotated[str, Field(min_length=1, max_length=128, pattern=r"\S")]
 Severity = Literal["routine", "urgent", "critical"]
 
 
@@ -55,7 +55,7 @@ class Assessment(BaseModel):
 
 
 class Decision(BaseModel):
-    intent: Literal["purchase", "maintenance", "clarification"]
+    intent: Literal["purchase", "maintenance", "clarification", "conversation"]
     item_id: str | None
     summary: str = Field(min_length=1, max_length=500)
     quantity: int = Field(ge=1, le=20, strict=True)

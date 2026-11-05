@@ -150,4 +150,16 @@ Set `NOTION_BRAIN_PAGE_ID` to a page whose child pages hold the procedures and a
 
 Use **Connect Oda** in the dashboard, finish sign-in/consent, then ask for explicit products and pack quantities, for example: `Order 2 packs of ground coffee, 500g each, and 1 carton of whole milk, 1 litre`. Set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY` for live interpretation. Review the basket and click **Add these products to Oda cart**. Delivery fees and the delivery slot are confirmed when you **Review delivery and pay on Oda**. Cart preparation does not place an order.
 
-`ODA_FOOD_ENABLED=true` is the default. Credentials stay in ignored `.data/oda/oauth.json`. Account signup/consent and a real cart test are deferred; automated tests use injected provider responses. See [the procurement guide](docs/procurement.md#food-through-the-official-oda-mcp).
+`ODA_FOOD_ENABLED=false` is the default for offline, simulated demos. Set it to `true` to enable Oda and connect an account. Credentials stay in ignored `.data/oda/oauth.json`. Account signup/consent and a real cart test are deferred; automated tests use injected provider responses. See [the procurement guide](docs/procurement.md#food-through-the-official-oda-mcp).
+
+### Conversation context and integrations
+
+Chat defaults to **General**. The Kitchen, Bathroom and Printer area buttons provide optional location context; they do not define the assistant's topics. General questions, planning and status requests are routed to the office agent and its registered tools, without preparing a purchase. The 3D model retains its existing three physical areas.
+
+Add capabilities through `apps/agent/office/plugins`: register a toolset in `PLUGINS` and use `requires = set()` for integrations available from every context. Module requirements are for hardware-dependent tools. Location IDs are strings validated against configured boards at the API boundary; new boards can converse without a procurement station. To enable purchasing at a new location, configure its station, approved catalogue and supplier offers. Exact-quote approval, spending limits and duplicate checks still apply.
+
+Mock mode remains a deterministic offline demo: it can report local order, approval and ticket status, but does not provide general language understanding or execute unavailable integrations. Live conversation uses the configured provider; these changes were tested offline with injected model responses. Physical device mappings and the 3D geometry remain explicit fixture locations, not conversation topic restrictions.
+
+### Persistent dashboard chat
+
+Dashboard messages use `/api/chat` and a browser-persisted conversation ID. SQLite stores each turn and its linked task; reloads and backend restarts retain the conversation. The existing Pydantic AI agent receives the last 40 conversational turns and chooses its registered tools. Device events retain their existing workflow. Purchase preparation is a validated tool call, and approval still resumes the original task and exact quote. Retried message IDs return the saved task instead of executing again. Earlier device/request conversations remain in History; new dashboard conversations are stored separately.

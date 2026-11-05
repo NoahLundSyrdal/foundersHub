@@ -86,3 +86,9 @@ Open `http://127.0.0.1:5175`. `OFFICE_API_URL` is an optional shell environment 
 ## Verification
 
 Run `npm test`, `npm run test:procurement`, `npm run check`, `npm run contracts:export`, and `npm run build`. Workflow tests cover command retries, changed payloads, stale versions, approval scope, step dependencies, missing evidence, uncertain results, receipt accounting, restart recovery, schedule overlap, timezone/DST behavior and bounded local follow-up. Hardware and real provider execution require their own validation.
+
+### Approval recovery and completion guards
+
+Cancelled or failed linked work cannot approve a purchase. Reject the old linked request and create a new request if the need returns. Service work with a pending booking requires its confirmed simulated booking before repair steps or closure can be confirmed. Ticket-only internal maintenance continues to use recorded repair and verification evidence.
+
+Expired standalone step approvals offer **Renew approval** in Work. Renewal preserves the action snapshot and returns it to pending review; it never executes the action. Rejected or already executed steps cannot be renewed. Receipt and repair confirmations publish a dashboard refresh after their domain updates commit. The background work monitor logs failed ticks without private details and continues local coordination on the next tick.

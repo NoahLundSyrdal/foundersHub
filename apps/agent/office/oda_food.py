@@ -15,7 +15,7 @@ _services = {}
 
 
 def enabled():
-    return os.getenv("ODA_FOOD_ENABLED", "true").lower() in {"1", "true", "yes"}
+    return os.getenv("ODA_FOOD_ENABLED", "false").lower() in {"1", "true", "yes"}
 
 
 def service(conn):

@@ -1,10 +1,25 @@
-# Demo guide
+# Local stage demo
 
-## Before presenting
+Preview: http://127.0.0.1:5181 (API on 127.0.0.1:3011).
+Use live Anthropic interpretation with simulated supplier execution. The existing
+board retains its firmware ID `kitchen`; its stage placement displays that feed.
+No extra physical board is implied by the map's simulated stock placements.
 
-Run `npm install`, create `.env` from `.env.example`, and start `npm run dev`. Keep `AGENT_PROVIDER=mock` and `SUPPLIER_PROVIDER=mock` for a repeatable local demo. Open http://localhost:5173 and verify the API is available.
+The board is connected to a separate computer. Its bridge and this dashboard must
+use the same reachable API. Set `OFFICE_API_URL` on the dashboard computer to that
+backend address and restart Vite. Do not point a remote board at this computer's
+127.0.0.1 address: loopback refers to each computer itself. Keep the local preview
+on loopback; shared network access needs the team's existing secured backend.
+Environmental samples are forwarded at most every five seconds, below the
+dashboard's 30-second stale window. The agent and map read the same physical
+source. Missing or stale values are labelled, never replaced with invented values.
 
-The default demo does not make a real purchase. Prices, delivery estimates, supplier name, and order reference are simulated. State this clearly when presenting.
+The preview currently starts with two open local reports (event-hall chair and café
+napkins). Keep other rooms clear: saving a report about the worktables creates their
+marker. Resolved cases remain in History. A purchase ticket shows its proposal and
+simulated supplier reference when an order exists; maintenance reports do not require
+a fabricated purchase. Work opens on the next incomplete step; all steps, case
+details, routines and history remain available in expandable sections.
 
 ## Main flow: kitchen supplies
 

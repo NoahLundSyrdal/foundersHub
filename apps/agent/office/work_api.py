@@ -1,5 +1,6 @@
 """Local operator workflow API. External sends and real execution are unavailable."""
 import asyncio
+import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -10,6 +11,9 @@ from office.work_models import EvidenceCreate, WorkAction, WorkCreate, WorkDecis
 from office.work_routines import RoutineCreate, WorkScheduler
 from office.work_service import WorkConflict, WorkNotFound, WorkService, canonical
 from office.work_templates import templates
+
+
+logger = logging.getLogger(__name__)
 
 
 class RoutineEnabled(BaseModel):
@@ -26,6 +30,7 @@ class WorkRuntime:
 
     def notify(self):
         bus.publish("work.updated", {}, source=self.conn)
+        bus.publish("state.changed", {}, source=self.conn)
 
     def tick(self):
         with self.service._atomic():
@@ -50,8 +55,12 @@ class WorkRuntime:
     async def watch(self):
         while True:
             await asyncio.sleep(10)
-            async with self.lock:
-                self.tick()
+            try:
+                async with self.lock:
+                    self.tick()
+            except Exception:
+                # Do not expose exception messages, which may contain private data.
+                logger.warning("Work monitor tick failed; will retry local coordination on the next tick")
 
 
 def router(runtime):

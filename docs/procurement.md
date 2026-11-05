@@ -4,7 +4,7 @@ Both spoken/typed needs and deterministic sensor triggers use the server-owned w
 
 ## Food through the official Oda MCP
 
-`ODA_FOOD_ENABLED=true` (default) routes food and drink requests, including coffee, to [Oda's official MCP](https://oda.com/mcp?lang=en). Click **Connect Oda** in the dashboard and complete Oda sign-in/consent. No Oda API key is needed. The OAuth public client uses PKCE, scope `mcp`, and the fixed callback `http://127.0.0.1:3001/api/integrations/oda/callback`. Run the documented loopback backend on port 3001. Credentials are saved only in ignored `.data/oda/oauth.json` (file 0600, directory 0700); they are never sent to the model or dashboard.
+`ODA_FOOD_ENABLED=true` (explicit opt-in) routes food and drink requests, including coffee, to [Oda's official MCP](https://oda.com/mcp?lang=en). Click **Connect Oda** in the dashboard and complete Oda sign-in/consent. No Oda API key is needed. The OAuth public client uses PKCE, scope `mcp`, and the fixed callback `http://127.0.0.1:3001/api/integrations/oda/callback`. Run the documented loopback backend on port 3001. Credentials are saved only in ignored `.data/oda/oauth.json` (file 0600, directory 0700); they are never sent to the model or dashboard.
 
 Example: `Order 2 packs of ground coffee, 500g each, and 1 carton of whole milk, 1 litre`. The structured interpretation extracts food queries and pack counts; Oda `product_search` supplies real IDs, names, prices and availability. One bounded Pydantic AI selection chooses suitable products. Application code validates returned IDs, exact quantities, decimal prices and the office product subtotal cap. Vague `order food` asks what products and quantities are wanted; it does not invent meals or dietary requirements. Delivery fees and slots remain pending until Oda checkout. No ratings, stock or delivery promises are invented.
 
@@ -21,7 +21,7 @@ The result is `checkout_ready`, **not an order**: click **Review delivery and pa
 | `POST /api/tasks/{id}/decide` | Exact `proposal_fingerprint` required before real cart mutation |
 | `POST /api/requests/{id}/approve` | Dashboard compatibility route for the same reviewed snapshot |
 
-Set `ODA_FOOD_ENABLED=false` only for the older fixture food flow. Deterministic sensor replenishment retains its existing fixed catalogue rules; real Oda cart writes require an explicit reviewed food request.
+The default `ODA_FOOD_ENABLED=false` uses the simulated fixture food flow for offline demos. Deterministic sensor replenishment retains its existing fixed catalogue rules; real Oda cart writes require an explicit reviewed food request.
 
 ## Run Leo's Python app
 

@@ -221,3 +221,20 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConversationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_structured_conversation_has_no_executable_product(self):
+        model = TestModel(call_tools=[], custom_output_args={
+            "intent": "conversation", "item_id": "coffee", "summary": "Explain onboarding", "quantity": 2, "question": None,
+            "assessment": {"severity": "routine", "confidence": 0.95, "requires_confirmation": False, "reason": "General question"},
+        })
+        result = await run_worker(request("Explain onboarding", provider="anthropic"), model=model)
+        self.assertEqual(result.interpretation.intent, "conversation")
+        self.assertIsNone(result.interpretation.item_id)
+        self.assertEqual(result.interpretation.quantity, 1)
+
+    async def test_configured_location_is_not_a_closed_enum(self):
+        result = await run_worker(request("Plan onboarding", station={"id": "meeting-room", "name": "Meeting room",
+            "responsible_team": "People", "equipment": [], "item_ids": []}, catalogue=[]))
+        self.assertEqual(result.interpretation.intent, "conversation")

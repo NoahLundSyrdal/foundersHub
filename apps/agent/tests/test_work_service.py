@@ -200,3 +200,36 @@ def test_completed_execution_can_collect_delivery_evidence_after_approval_expiry
     work = evidence(service, work, "order", "order_confirmation")
     work = act(service, work, "complete_step", step_id="order")
     assert act(service, work, "close")["status"] == "completed"
+
+
+def test_rejected_decision_cannot_be_replaced_or_renewed(service):
+    work = approve(service, purchase(service), approve=False)
+    with pytest.raises(WorkConflict, match="already decided"):
+        approve(service, work)
+    service.clock = lambda: datetime(2026, 11, 8, 12, tzinfo=UTC)
+    with pytest.raises(WorkConflict, match="non-rejected"):
+        act(service, work, "renew_approval", step_id="order")
+
+
+@pytest.mark.parametrize("approved", [False, True])
+def test_expired_approval_renewal_requires_new_review_and_preserves_snapshot(service, approved):
+    work = purchase(service)
+    if approved:
+        work = approve(service, work)
+    snapshot = work["steps"][0]["action_snapshot"]
+    with pytest.raises(WorkConflict, match="not expired"):
+        act(service, work, "renew_approval", step_id="order")
+    old_work = work
+    service.clock = lambda: datetime(2026, 11, 8, 12, tzinfo=UTC)
+    work = act(service, work, "renew_approval", step_id="order")
+    assert work["steps"][0]["action_snapshot"] == snapshot
+    assert work["steps"][0]["approval"]["status"] == "pending"
+    with pytest.raises(WorkConflict, match="Work changed"):
+        approve(service, old_work, event_key="stale-review")
+    with pytest.raises(WorkConflict, match="approval is required"):
+        act(service, work, "simulate_step", step_id="order")
+    work = approve(service, work)
+    work = act(service, work, "simulate_step", step_id="order")
+    service.clock = lambda: datetime(2026, 11, 10, 12, tzinfo=UTC)
+    with pytest.raises(WorkConflict, match="unexecuted"):
+        act(service, work, "renew_approval", step_id="order")
