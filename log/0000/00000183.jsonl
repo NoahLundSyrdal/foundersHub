@@ -1,0 +1,1 @@
+{"id":"mw3r7yi46c2f5f9c","member":"noah-lund-syrdal-b43119","lamport":265,"ts":1793895764332,"type":"upsert","kind":"task","key":"ordering-system-merge","data":{"title":"Integrate and merge ordering system and required PR dependencies","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["apps/agent","apps/procurement","apps/web","packages/contracts"]},"source":"explicit"}
