@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from office import agent, approval_email, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import chat_api, facility_api, oda_food, oda_api, work_api
 from office import alert_rules, order_confirmations, whatsapp_delivery, room_service, room_demo, development, development_api
+from office import temperature_trend
 from office.room_messaging import RoomMessageConflict
 from office.facility_rules import FacilityReading
 from office.speaker import Speaker
@@ -281,6 +282,13 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
                     raise HTTPException(400, str(error)) from error
             conn.execute("INSERT INTO sensor_readings VALUES (?, ?, ?, ?)", (board.id, body.kind, body.value, db.now()))
             return {"stored": True}
+
+    @app.get("/api/temperature-trend/{board_id}")
+    async def get_temperature_trend(board_id: str):
+        """Read-only: computed from stored physical readings on request; no alerting."""
+        board = board_or_404(board_id)
+        async with mutation_lock:
+            return temperature_trend.compute(conn, board.id, facilities.engine._now())
 
     @app.post("/api/tasks/{task_id}/decide")
     async def decide(task_id: str, body: Decision):
