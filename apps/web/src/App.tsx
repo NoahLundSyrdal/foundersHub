@@ -183,6 +183,7 @@ export function App() {
     <div className="desk">
       <h1 className="sr-only">Office status</h1>
       <AgentStage
+        agentMode={!health ? "connecting" : mockAgent ? "mock" : "live"}
         request={focus}
         stationName={stations.find((s) => s.id === focus?.station_id)?.name}
         offline={!!connectionError}
