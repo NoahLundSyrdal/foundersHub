@@ -87,3 +87,32 @@ def test_stock_low_device_event_proposes_one_unit(api):
     task = api.post("/api/device-events", json=ev).json()
     pending = api.get("/api/state").json()["tasks"][0]["pending"]
     assert task["command"]["color"] == "amber" and pending[0]["args"] == {"product_id": "toilet-paper", "quantity": 1}
+
+
+def test_next_speaker_never_continues_previous_speakers_task(api):
+    leo = say(api, "we need cups", person="Leo")
+    guest = say(api, "we need coffee")  # right after, same board: must not inherit Leo's task or identity
+    assert guest["id"] != leo["id"] and guest["person"] != "Leo"
+
+
+def test_parallel_orders_in_one_turn_buy_once(api):
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from office.agent import office_agent
+
+    def three_calls(messages, info):
+        if any(isinstance(p, ToolReturnPart) for p in messages[-1].parts):
+            return ModelResponse(parts=[TextPart("done")])
+        return ModelResponse(parts=[ToolCallPart("place_order", {"product_id": "toner"}, tool_call_id=f"c{i}") for i in range(3)])
+
+    with office_agent.override(model=FunctionModel(three_calls)):
+        task = say(api, "toner please", board="printer")
+        assert task["status"] == "awaiting_approval" and len(task["pending"]) == 3
+        assert api.post(f"/api/tasks/{task['id']}/decide", json={"approve": True}).status_code == 200
+    assert len(orders(api)) == 1
+
+
+def test_audio_must_be_valid_base64(api):
+    r = api.post("/api/input", json={"board_id": "kitchen", "audio_b64": "not base64!!"})
+    assert r.status_code == 400

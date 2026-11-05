@@ -2,6 +2,7 @@
 
 import base64
 import asyncio
+import binascii
 import json
 import math
 from contextlib import asynccontextmanager, suppress
@@ -117,9 +118,12 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         board_or_404(body.board_id)
         text, person = body.text, body.person
         if body.audio_b64:
-            audio = base64.b64decode(body.audio_b64)
-            text = text or voice.transcribe(audio)
-            person = person or voice.identify(audio)
+            try:
+                audio = base64.b64decode(body.audio_b64, validate=True)
+            except binascii.Error:
+                raise HTTPException(400, "audio_b64 is not valid base64")
+            text = text or await asyncio.to_thread(voice.transcribe, audio)  # network call: keep the loop free
+            person = person or await asyncio.to_thread(voice.identify, audio)
         if not text or not text.strip():
             raise HTTPException(400, "Need text or audio")
         async with mutation_lock:
