@@ -213,6 +213,7 @@ class FacilityService:
                 value["question"] = plan["question"]
             elif plan["kind"] == "proposal":
                 value["approval_required"] = needs_approval(value, policy)
+                value["approval"] = workflow.approval_route(value["proposal"], policy)
             workflow.store_context(self.conn, task_id, value)
         if value.get("duplicate_task_id"):
             _task_update(self.conn, task_id, "done", f"Equivalent replenishment already active ({value['duplicate_task_id']}); no additional order.")

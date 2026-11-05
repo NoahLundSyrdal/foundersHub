@@ -24,7 +24,8 @@
     "test:procurement": "uv run --project apps/agent --group dev python -m unittest discover -s apps/procurement/tests -v",
     "setup:python": "uv sync --project apps/agent --group dev",
     "test:agent": "cd apps/agent && OFFICE_MODEL=mock TAVILY_API_KEY= uv run --group dev pytest -q",
-    "device:simulate": "python3 apps/device/src/bridge.py --simulate --station kitchen --text 'We need coffee'"
+    "device:simulate": "python3 apps/device/src/bridge.py --simulate --station kitchen --text 'We need coffee'",
+    "connect": "uv run --project apps/agent python -m office.connect"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

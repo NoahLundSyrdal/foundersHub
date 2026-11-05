@@ -8,9 +8,9 @@ Add a file, append it to PLUGINS, done. Board modules live in config/boards.json
 """
 
 from office.config import Board
-from office.plugins import facilities, hardware, procurement, sensors
+from office.plugins import facilities, hardware, knowledge, procurement, sensors
 
-PLUGINS = [procurement, facilities, hardware, sensors]
+PLUGINS = [procurement, facilities, hardware, sensors, knowledge]
 
 
 def for_board(board: Board) -> list:

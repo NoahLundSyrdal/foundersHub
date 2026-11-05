@@ -2,7 +2,7 @@
 import json
 import time
 
-from office import bus, config, db
+from office import brain, bus, config, db
 from office_procurement.config import configuration
 from office_procurement.planning import plan_purchase, needs_approval, fixture_offers, offer_total
 from office_procurement.serialization import proposal_fingerprint, epoch
@@ -50,7 +50,21 @@ def store_context(conn, task_id, value):
 
 def enrich_task(conn, task):
     value = get_context(conn, task["id"])
-    return task | {key: value.get(key) for key in ("assessment", "proposal", "research", "approval_required", "grocery")} if value else task
+    return task | {key: value.get(key) for key in ("assessment", "proposal", "research", "approval_required", "approval", "grocery")} if value else task
+
+
+def approval_route(proposal, rules) -> dict:
+    """Who must approve, from the company brain's routing table (office/brain.py). Application code decides the
+    type; the model never picks the approver. A repair/visit is `contractor`, anything above the cap is
+    `purchase_over_cap`, everything else `purchase`."""
+    cap = rules["max_order_nok"]
+    if proposal.get("fulfillment_kind") == "service":
+        kind, reason = "contractor", "Booking a paid service visit"
+    elif proposal["total_nok"] > cap:
+        kind, reason = "purchase_over_cap", f"Above the office cap of {cap:g} NOK per order"
+    else:
+        kind, reason = "purchase", "Office policy requires a human to approve this order"
+    return {"type": kind, "approver": brain.approver(kind), "reason": reason}
 
 
 def current_configuration():
@@ -109,6 +123,7 @@ async def prepare_need(conn, task_id: str, text: str | None):
         if plan["kind"] == "proposal":
             value["proposal"] = plan["proposal"]
             value["approval_required"] = needs_approval({"assessment": value["assessment"], "proposal": value["proposal"]}, rules)
+            value["approval"] = approval_route(value["proposal"], rules)
         elif plan["kind"] == "duplicate":
             value["duplicate_task_id"] = plan["request"]["id"]
         else:
@@ -149,7 +164,7 @@ def validate_quote(conn, task_id):
                 product["price_nok"] == q["unit_price_nok"] and product["name"] == q["name"] and product["supplier"] == q["supplier"] and
                 p["fulfillment_kind"] == q["fulfillment_kind"] and p["currency"] == "NOK" and p["simulation"] is True and
                 product["delivery_estimate"] == f"Simulation: {q['delivery_hours']} hours (not verified)" and
-                p["total_nok"] == offer_total(q, quantity) and p["total_nok"] <= rules["max_order_nok"] and
+                p["total_nok"] == offer_total(q, quantity) and
                 q["quality_score"] >= rules["minimum_quality"] and q["delivery_hours"] <= rules["max_delivery_hours"]):
             raise ProcurementConflict("Quote or policy changed; create a new request and review it again.")
         return value, rules
@@ -159,9 +174,11 @@ def validate_quote(conn, task_id):
 
 def approval_metadata(value, person_name):
     p = value["proposal"]
+    route = value.get("approval") or approval_route(p, current_configuration()[3])
     return {"summary": f"{p['quantity']} × {p['product']['name']} = {p['total_nok']:g} NOK (simulated)",
             "total_nok": p["total_nok"], "requested_by": person_name, "proposal": p,
-            "proposal_fingerprint": proposal_fingerprint(p), "assessment": value["assessment"]}
+            "proposal_fingerprint": proposal_fingerprint(p), "assessment": value["assessment"],
+            "approval_type": route["type"], "approver": route["approver"], "approval_reason": route["reason"]}
 
 
 def release_quote(conn, task_id):
@@ -198,6 +215,7 @@ def requote_task(conn, task_id, fingerprint):
         raise ProcurementConflict("No replacement quote is eligible; administrator review is needed.")
     revision = value["proposal"].get("quote_revision", 0) + 1
     value["proposal"] = plan["proposal"] | {"quote_revision": revision}
+    value["approval"] = approval_route(value["proposal"], rules)
     value.pop("approved_fingerprint", None)
     value["approval_required"] = True
     pending = json.loads(task["pending"])

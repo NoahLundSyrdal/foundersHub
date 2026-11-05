@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from office import agent, bus, config, db, voice, procurement_workflow, legacy
+from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, legacy
 from office import facility_api, oda_food, oda_api, work_api
 from office.facility_rules import FacilityReading
 
@@ -95,7 +95,21 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
 
     @app.get("/api/health")
     async def health():
-        return {"ok": True, "model": config.MODEL, "orders": "simulated", "agent_provider": config.MODEL, "supplier_provider": "mock", "simulation": True}
+        return {"ok": True, "model": config.MODEL, "orders": "simulated", "agent_provider": config.MODEL, "supplier_provider": "mock", "simulation": True,
+                "brain": "notion snapshot" if brain.source() == brain.SNAPSHOT else "local copy (config/brain)", "integrations": integrations.status()}
+
+    @app.get("/api/brain")
+    async def get_brain():
+        """Company brain in use: where it came from, the approval routing table, and the procedure documents."""
+        return {"source": str(brain.source().relative_to(config.ROOT)), "routing": brain.routing(), "docs": brain.docs()}
+
+    @app.post("/api/brain/sync")
+    async def sync_brain():
+        """Re-read the brain from Notion (NOTION_BRAIN_PAGE_ID). 409 if not connected or the routing table is invalid."""
+        try:
+            return await brain.sync()
+        except brain.BrainError as e:
+            raise HTTPException(409, str(e)) from e
 
     @app.get("/api/boards")
     async def boards():
