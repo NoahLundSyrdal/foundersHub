@@ -1,5 +1,7 @@
 """Ordering from the approved catalogue. Execution is SIMULATED; prices come from the catalogue, never the model."""
 
+import threading
+
 from pydantic_ai import ApprovalRequired, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
@@ -8,6 +10,7 @@ from office.deps import Deps
 
 requires: set[str] = set()
 toolset = FunctionToolset()
+_order_lock = threading.Lock()  # sync tools run in worker threads; check+insert must be atomic across tasks
 
 
 @toolset.tool
@@ -21,7 +24,7 @@ def search_catalogue(ctx: RunContext[Deps], query: str) -> list[dict]:
     ]
 
 
-@toolset.tool
+@toolset.tool(sequential=True)  # parallel calls would all pass the duplicate check before any insert
 def place_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> str:
     """Order a catalogue product. A human is asked automatically if the speaker's limit is exceeded."""
     product = config.PRODUCTS.get(product_id)
@@ -33,6 +36,11 @@ def place_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> st
     if total > config.OFFICE["max_order_nok"]:
         return f"Refused: {total} NOK exceeds the office limit of {config.OFFICE['max_order_nok']} NOK."
 
+    with _order_lock:
+        return _place(ctx, product, product_id, quantity, total)
+
+
+def _place(ctx: RunContext[Deps], product: dict, product_id: str, quantity: int, total: int) -> str:
     open_order = db.row(ctx.deps.db, "SELECT * FROM orders WHERE product_id = ? AND status = 'simulated'", product_id)
     if open_order:
         return f"Not ordering again: {product['name']} is already on its way (ref {open_order['ref']})."

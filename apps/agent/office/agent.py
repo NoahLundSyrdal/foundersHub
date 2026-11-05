@@ -78,11 +78,16 @@ def _update(conn, task_id: str, **fields) -> dict:
 
 
 def start_task(conn, board_id: str, person_name: str, text: str) -> str:
-    """New task, or continue the board's last task if it finished in the last 2 minutes (follow-up answers)."""
+    """New task, or continue the board's last task when it just asked *this same person* a question.
+
+    Never continue across speakers (that would borrow their approval limit) or for sensor-triggered tasks.
+    """
     recent = db.row(
         conn,
-        "SELECT * FROM tasks WHERE board_id = ? AND status = 'done' AND updated_at > ? ORDER BY updated_at DESC LIMIT 1",
+        "SELECT * FROM tasks WHERE board_id = ? AND person = ? AND person != 'sensor' AND status = 'done' "
+        "AND reply LIKE '%?' AND updated_at > ? ORDER BY updated_at DESC LIMIT 1",
         board_id,
+        person_name,
         (datetime.now(UTC) - timedelta(minutes=2)).isoformat(timespec="seconds"),
     )
     if recent:
@@ -93,6 +98,14 @@ def start_task(conn, board_id: str, person_name: str, text: str) -> str:
         (task_id, board_id, person_name, text, db.now(), db.now()),
     )
     return task_id
+
+
+def recover(conn) -> None:
+    """At startup: a task left 'running' was interrupted mid-run. Fail it visibly; its orders (if any) are in `orders`."""
+    for t in db.rows(conn, "SELECT id FROM tasks WHERE status = 'running'"):
+        placed = db.rows(conn, "SELECT ref FROM orders WHERE task_id = ?", t["id"])
+        note = f" Orders placed before the interruption: {', '.join(o['ref'] for o in placed)}." if placed else " No order was placed."
+        _update(conn, t["id"], status="failed", pending="[]", reply="Interrupted by a server restart." + note)
 
 
 async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResults | None = None) -> dict:
@@ -111,9 +124,12 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
             deferred_tool_results=deferred,
         )
     except Exception as e:  # demo: surface any failure on the board instead of crashing the request
-        reply = f"Sorry, something went wrong: {type(e).__name__}"
+        placed = db.rows(conn, "SELECT ref FROM orders WHERE task_id = ?", task_id)
+        reply = f"Sorry, something went wrong ({type(e).__name__})."
+        if placed:  # the failure may come after an order was placed: never hide that
+            reply += f" Already ordered (simulated): {', '.join(o['ref'] for o in placed)}."
         bus.publish("board.say", {"board_id": board.id, "text": reply})
-        return _update(conn, task_id, status="failed", reply=f"{reply}: {e}") | {
+        return _update(conn, task_id, status="failed", pending="[]", reply=f"{reply} {e}") | {
             "command": db.set_command(conn, board.id, reply, "red")
         }
 
@@ -139,8 +155,15 @@ async def decide(conn, task_id: str, approve: bool) -> dict:
     t = db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)
     if not t or t["status"] != "awaiting_approval":
         raise StaleApproval("Task is not awaiting approval")
+    pending = json.loads(t["pending"])
+    for p in pending:  # the approver saw a price; refuse if the catalogue changed since
+        product = config.PRODUCTS.get(p["args"].get("product_id"), {})
+        shown = p["details"].get("total_nok")
+        if shown is not None and product.get("price_nok", 0) * p["args"].get("quantity", 1) != shown:
+            _update(conn, task_id, status="failed", pending="[]", reply="Price changed since approval was requested. Ask again.")
+            raise StaleApproval("Price changed since it was shown")
     conn.execute("UPDATE tasks SET status = 'running' WHERE id = ?", (task_id,))  # claim it before any await
     results = DeferredToolResults(
-        approvals={p["tool_call_id"]: True if approve else ToolDenied("A human denied this.") for p in json.loads(t["pending"])}
+        approvals={p["tool_call_id"]: True if approve else ToolDenied("A human denied this.") for p in pending}
     )
     return await run(conn, task_id, None, deferred=results)

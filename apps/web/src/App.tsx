@@ -11,12 +11,16 @@ export function App() {
   const [activity, setActivity] = useState<Activity[]>([]);
   const [error, setError] = useState("");
   const [model, setModel] = useState("");
+  const [deciding, setDeciding] = useState<string | null>(null);
 
   const refresh = useCallback(() => api<State>("/state").then(setState).catch((e) => setError(e.message)), []);
 
   useEffect(() => {
-    api<{ boards: Board[]; people: Person[] }>("/boards").then((r) => (setBoards(r.boards), setPeople(r.people)));
-    api<{ model: string }>("/health").then((r) => setModel(r.model));
+    const loadStatic = () => {
+      api<{ boards: Board[]; people: Person[] }>("/boards").then((r) => (setBoards(r.boards), setPeople(r.people))).catch(() => {});
+      api<{ model: string }>("/health").then((r) => setModel(r.model)).catch(() => {});
+    };
+    loadStatic();
     refresh();
     const log = (kind: string, text: string) =>
       setActivity((a) => [{ at: new Date().toLocaleTimeString(), kind, text }, ...a].slice(0, 40));
@@ -30,12 +34,18 @@ export function App() {
     es.addEventListener("tool.result", (e) => log("result", `${JSON.parse(e.data).tool} → ${JSON.parse(e.data).content}`));
     es.addEventListener("board.say", (e) => log("say", `${JSON.parse(e.data).board_id}: ${JSON.parse(e.data).text}`));
     es.addEventListener("board.listen", (e) => log("listen", `${JSON.parse(e.data).board_id}: button pressed, listening`));
-    es.onopen = refresh; // reconnect: refetch authoritative state
+    es.onopen = () => (loadStatic(), refresh()); // (re)connect: refetch authoritative state
     const poll = setInterval(refresh, 5000);
     return () => (es.close(), clearInterval(poll));
   }, [refresh]);
 
   const act = (p: Promise<unknown>) => p.then(refresh).catch((e) => setError(e.message));
+  const decide = (id: string, approve: boolean) => {
+    setDeciding(id);
+    api(`/tasks/${id}/decide`, { approve })
+      .catch((e) => setError(e.message.includes("not awaiting") ? "Already decided" : e.message))
+      .finally(() => (setDeciding(null), refresh()));
+  };
   const waiting = state.tasks.filter((t) => t.status === "awaiting_approval");
 
   return (
@@ -64,8 +74,9 @@ export function App() {
               {t.pending.map((p) => (
                 <div key={p.tool_call_id}>{p.details.summary ?? `${p.tool} ${JSON.stringify(p.args)}`}</div>
               ))}
-              <button onClick={() => act(api(`/tasks/${t.id}/decide`, { approve: true }))}>Approve</button>
-              <button className="ghost" onClick={() => act(api(`/tasks/${t.id}/decide`, { approve: false }))}>Deny</button>
+              <div className="muted">Simulated order: no money is spent.</div>
+              <button disabled={deciding === t.id} onClick={() => decide(t.id, true)}>{deciding === t.id ? "…" : "Approve"}</button>
+              <button disabled={deciding === t.id} className="ghost" onClick={() => decide(t.id, false)}>Deny</button>
             </div>
           ))}
 

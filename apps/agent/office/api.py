@@ -1,6 +1,8 @@
 """HTTP API. Run: uv run uvicorn office.api:create_app --factory --port 3001 (from apps/agent)."""
 
+import asyncio
 import base64
+import binascii
 import json
 
 from fastapi import FastAPI, HTTPException
@@ -19,7 +21,7 @@ class Input(BaseModel):
 
 class Sensor(BaseModel):
     board_id: str
-    kind: str  # e.g. stock_level, temperature, humidity, distance
+    kind: str  # e.g. stock_level, temperature, humidity, distance_mm
     value: float
 
 
@@ -37,6 +39,7 @@ class DeviceEvent(BaseModel):  # legacy shape still emitted by apps/device/src/b
 
 def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     conn = db.connect(db_path)
+    agent.recover(conn)  # tasks interrupted by a restart become visible failures, not stuck 'running'
     app = FastAPI(title="Office agent")
 
     def board_or_404(board_id: str) -> config.Board:
@@ -73,9 +76,12 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         board_or_404(body.board_id)
         text, person = body.text, body.person
         if body.audio_b64:
-            audio = base64.b64decode(body.audio_b64)
-            text = text or voice.transcribe(audio)
-            person = person or voice.identify(audio)
+            try:
+                audio = base64.b64decode(body.audio_b64, validate=True)
+            except binascii.Error:
+                raise HTTPException(400, "audio_b64 is not valid base64")
+            text = text or await asyncio.to_thread(voice.transcribe, audio)  # network call: keep the loop free
+            person = person or await asyncio.to_thread(voice.identify, audio)
         if not text or not text.strip():
             raise HTTPException(400, "Need text or audio")
         return await handle_text(body.board_id, text.strip(), person)
@@ -121,22 +127,29 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         board = board_or_404(ev.station_id)
         seen = db.row(conn, "SELECT response FROM device_events WHERE event_id = ?", ev.event_id)
         if seen:  # transport retry: same event id never creates a second task
+            if seen["response"] is None:  # first attempt still running
+                return {"request": {"id": ev.event_id}, "duplicate": True, "command": {"station_id": board.id, "text": "Working on it...", "color": "blue"}}
             return json.loads(seen["response"]) | {"duplicate": True}
-        if ev.type == "button_pressed":  # push-to-talk: a voice client listening on SSE starts recording
-            bus.publish("board.listen", {"board_id": board.id})
-            result = {"request": {"id": ev.event_id}, "command": db.set_command(conn, board.id, "Listening...", "blue")}
-        elif ev.type == "speech_transcript":
-            task = await handle_text(board.id, ev.payload.get("text", ""), ev.payload.get("person"))
-            result = {"request": {"id": task["id"]}, "command": task["command"]}
-        elif ev.type == "stock_low":
-            item = config.PRODUCTS.get(ev.payload.get("item_id"), {}).get("name", ev.payload.get("item_id"))
-            prompt = f"[sensor] {item} is running low at the {board.location} ({ev.payload.get('level', '?')}%)."
-            task = await handle_text(board.id, prompt, "sensor")
-            result = {"request": {"id": task["id"]}, "command": task["command"]}
-        else:
-            raise HTTPException(400, f"Unsupported event type {ev.type!r}")
+        conn.execute("INSERT INTO device_events VALUES (?, NULL, NULL)", (ev.event_id,))  # claim before any await
+        try:
+            if ev.type == "button_pressed":  # push-to-talk: a voice client listening on SSE starts recording
+                bus.publish("board.listen", {"board_id": board.id})
+                result = {"request": {"id": ev.event_id}, "command": db.set_command(conn, board.id, "Listening...", "blue")}
+            elif ev.type == "speech_transcript":
+                task = await handle_text(board.id, ev.payload.get("text", ""), ev.payload.get("person"))
+                result = {"request": {"id": task["id"]}, "command": task["command"]}
+            elif ev.type == "stock_low":
+                item = config.PRODUCTS.get(ev.payload.get("item_id"), {}).get("name", ev.payload.get("item_id"))
+                prompt = f"[sensor] {item} is running low at the {board.location} ({ev.payload.get('level', '?')}%)."
+                task = await handle_text(board.id, prompt, "sensor")
+                result = {"request": {"id": task["id"]}, "command": task["command"]}
+            else:
+                raise HTTPException(400, f"Unsupported event type {ev.type!r}")
+        except Exception:
+            conn.execute("DELETE FROM device_events WHERE event_id = ?", (ev.event_id,))  # let a retry try again
+            raise
         result["duplicate"] = False
-        conn.execute("INSERT INTO device_events VALUES (?, ?, ?)", (ev.event_id, result["request"]["id"], json.dumps(result)))
+        conn.execute("UPDATE device_events SET task_id = ?, response = ? WHERE event_id = ?", (result["request"]["id"], json.dumps(result), ev.event_id))
         return result
 
     @app.get("/api/devices/{board_id}/command")

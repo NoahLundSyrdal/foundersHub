@@ -85,3 +85,27 @@ def test_stock_low_device_event_proposes_one_unit(api):
     task = api.post("/api/device-events", json=ev).json()
     pending = api.get("/api/state").json()["tasks"][0]["pending"]
     assert task["command"]["color"] == "amber" and pending[0]["args"] == {"product_id": "toilet-paper", "quantity": 1}
+
+
+def test_follow_up_never_borrows_previous_speakers_limit(api):
+    say(api, "we need cups", person="Leo")  # Leo: auto-approved
+    task = say(api, "we need coffee")  # guest right after, same board
+    assert task["status"] == "awaiting_approval" and task["person"] != "Leo"
+
+
+def test_parallel_orders_in_one_turn_buy_once(api):
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from office.agent import office_agent
+
+    def two_calls(messages, info):
+        if any(isinstance(p, ToolReturnPart) for p in messages[-1].parts):
+            return ModelResponse(parts=[TextPart("done")])
+        return ModelResponse(parts=[ToolCallPart("place_order", {"product_id": "toner"}, tool_call_id=f"c{i}") for i in range(3)])
+
+    with office_agent.override(model=FunctionModel(two_calls)):
+        task = say(api, "toner please")
+        assert len(task["pending"]) == 3
+        api.post(f"/api/tasks/{task['id']}/decide", json={"approve": True})
+    assert len(orders(api)) == 1
