@@ -1,0 +1,1 @@
+{"id":"mw3n502ydcb80d69","member":"jrg-bergh-c202cb","lamport":46,"ts":1793888907947,"type":"upsert","kind":"task","key":"usecase-doc","data":{"title":"Write main use cases doc (CO2 checker, order by voice)","status":"doing","owner":"jrg-bergh-c202cb","areas":["docs/usecases.md"]},"source":"explicit"}
