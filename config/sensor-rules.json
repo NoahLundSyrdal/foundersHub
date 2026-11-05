@@ -1,0 +1,15 @@
+[
+  {
+    "id": "demo-co2-high",
+    "station_id": "kitchen",
+    "metric": "co2_ppm",
+    "direction": "above",
+    "trigger_value": 1200,
+    "reset_value": 1000,
+    "min_samples": 3,
+    "min_duration_seconds": 30,
+    "max_gap_seconds": 30,
+    "item_id": "ventilation-service",
+    "summary": "CO2 rule: sustained high reading; request a ventilation inspection. This is a simulated configurable rule, not a diagnosis."
+  }
+]

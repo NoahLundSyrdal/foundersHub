@@ -9,11 +9,19 @@
     },
     "station_id": {
       "type": "string",
-      "enum": ["kitchen", "bathroom", "printer"]
+      "enum": [
+        "kitchen",
+        "bathroom",
+        "printer"
+      ]
     },
     "type": {
       "type": "string",
-      "enum": ["button_pressed", "speech_transcript", "stock_low"]
+      "enum": [
+        "button_pressed",
+        "speech_transcript",
+        "stock_low"
+      ]
     },
     "timestamp": {
       "type": "string",
@@ -42,6 +50,12 @@
       "additionalProperties": false
     }
   },
-  "required": ["event_id", "station_id", "type", "timestamp", "payload"],
+  "required": [
+    "event_id",
+    "station_id",
+    "type",
+    "timestamp",
+    "payload"
+  ],
   "additionalProperties": false
 }

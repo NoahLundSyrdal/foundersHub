@@ -10,11 +10,15 @@ import { AgentStage } from "./AgentStage";
 import { api } from "./api";
 import { isMerged, money, requestTitle, stamp } from "./format";
 import { HistoryView } from "./HistoryView";
+import { OfficeTwin } from "./OfficeTwin";
+import { ProcurementAlerts } from "./ProcurementAlerts";
 
 type Health = {
-  agent_provider: string;
-  supplier_provider: string;
-  simulation: true;
+  agent_provider?: string;
+  supplier_provider?: string;
+  simulation?: boolean;
+  model?: string;
+  orders?: string;
 };
 type Recognition = {
   lang: string;
@@ -54,7 +58,7 @@ export function App() {
     [connectionError, setConnectionError] = useState(""),
     [listening, setListening] = useState(false),
     [streamConnected, setStreamConnected] = useState(false),
-    [view, setView] = useState<"desk" | "history">("desk"),
+    [view, setView] = useState<"desk" | "history" | "twin">("twin"),
     [followed, setFollowed] = useState<string | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const refreshSequence = useRef(0);
@@ -149,6 +153,10 @@ export function App() {
       void sync();
     };
     stream.addEventListener("requests.updated", () => void sync());
+    // Native task and board routes also update the dashboard adapter.
+    stream.addEventListener("task.updated", () => void sync());
+    stream.addEventListener("state.changed", () => void sync());
+    stream.addEventListener("board.listen", () => void sync());
     stream.onerror = () => {
       if (!alive) return;
       setStreamConnected(false);
@@ -191,6 +199,7 @@ export function App() {
         payload: {},
       };
       onEvent(await api<EventResponse>("/device-events", event));
+      setView("desk");
     });
   }
   function stockLow() {
@@ -201,6 +210,18 @@ export function App() {
         type: "stock_low",
         timestamp: new Date().toISOString(),
         payload: { item_id: "toilet-paper", level: 15 },
+      };
+      onEvent(await api<EventResponse>("/device-events", event));
+    });
+  }
+  function runScenario(stationId: Station["id"], transcript: string) {
+    void perform(async () => {
+      const event: DeviceEvent = {
+        event_id: crypto.randomUUID(),
+        station_id: stationId,
+        type: "speech_transcript",
+        timestamp: new Date().toISOString(),
+        payload: { text: transcript },
       };
       onEvent(await api<EventResponse>("/device-events", event));
     });
@@ -246,10 +267,10 @@ export function App() {
       <AgentStage
         request={active}
         stationName={stations.find((s) => s.id === active?.station_id)?.name}
-        provider={health?.agent_provider}
+        provider={health?.agent_provider ?? health?.model}
         offline={!!connectionError}
       />
-      <main className="work">
+      <main className={`work ${view === "twin" ? "work-twin" : ""}`}>
         {connectionError && (
           <div role="alert" className="alert error">
             Backend unavailable: {connectionError}. Start the API with{" "}
@@ -285,6 +306,13 @@ export function App() {
         )}
         <nav className="views" aria-label="Views">
           <button
+            aria-pressed={view === "twin"}
+            disabled={listening}
+            onClick={() => setView("twin")}
+          >
+            Office twin
+          </button>
+          <button
             aria-pressed={view === "desk"}
             disabled={listening}
             onClick={() => setView("desk")}
@@ -299,7 +327,20 @@ export function App() {
             History
           </button>
         </nav>
-        {view === "history" ? (
+        <ProcurementAlerts />
+        {view === "twin" ? (
+          <OfficeTwin
+            stations={stations}
+            requests={requests}
+            connected={streamConnected}
+            offline={!!connectionError}
+            disabled={busy || listening}
+            onPress={press}
+            onStockLow={stockLow}
+            onScenario={runScenario}
+            onRequest={openRequest}
+          />
+        ) : view === "history" ? (
           <HistoryView
             requests={requests}
             stations={stations}
@@ -444,7 +485,7 @@ export function App() {
                       </button>
                     )}
                     <p className="hint">
-                      Demo catalogue and estimated delivery. This does not place a
+                      Simulated catalogue and estimated delivery. This does not place a
                       real order.
                     </p>
                   </div>
@@ -569,8 +610,8 @@ export function App() {
                 : "Reconnecting, checking every 5 seconds"}
           </span>
           <span>
-            Agent: {health?.agent_provider ?? "…"} · Supplier:{" "}
-            {health?.supplier_provider ?? "…"}
+            Agent: {health?.agent_provider ?? health?.model ?? "…"} · Supplier:{" "}
+            {health?.supplier_provider ?? health?.orders ?? "…"}
           </span>
         </footer>
       </main>

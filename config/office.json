@@ -1,8 +1,22 @@
 {
-  "name": "Founders Hub Demo Office",
+  "name": "Founders Hub Office",
   "currency": "NOK",
   "max_order_nok": 1000,
   "require_approval": true,
-  "preferences": ["Use approved catalogue", "Prefer predictable delivery"],
-  "delivery_address": "Configure before enabling a real supplier"
+  "preferences": [
+    "Use approved catalogue",
+    "Prefer predictable delivery"
+  ],
+  "delivery_address": "Configure before enabling a real supplier",
+  "ranking_weights": {
+    "price": 0.4,
+    "quality": 0.35,
+    "delivery": 0.25
+  },
+  "minimum_quality": 60,
+  "max_delivery_hours": 168,
+  "quote_ttl_seconds": 900,
+  "service_requires_approval": true,
+  "auto_approval_min_confidence": 0.85,
+  "auto_approval_max_nok": 300
 }
