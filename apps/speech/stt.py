@@ -91,16 +91,18 @@ class SpeechToText:
 
     # ---- recording -------------------------------------------------------
     def record(self, stop: str = "silence", max_seconds: float = 15.0,
-               silence_seconds: float = 1.2, threshold: float = 0.015) -> np.ndarray:
+               silence_seconds: float = 1.2, threshold: float = 0.015,
+               stop_event: threading.Event | None = None) -> np.ndarray:
         """Record mono 16 kHz float32 audio from the default mic.
 
         stop="silence": ends after `silence_seconds` of quiet once speech was heard.
         stop="enter":   ends when Enter is pressed (or at max_seconds).
+        stop_event:     also ends when this is set (e.g. a second press on the board button).
         """
         import sounddevice as sd
 
         chunks: queue.Queue[np.ndarray] = queue.Queue()
-        done = threading.Event()
+        done = stop_event or threading.Event()
         if stop == "enter":
             threading.Thread(target=lambda: (sys.stdin.readline(), done.set()), daemon=True).start()
 
