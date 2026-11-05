@@ -11,13 +11,19 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "concurrently -k -n api,web \"npm run dev -w @office/server\" \"npm run dev -w @office/web\"",
-    "dev:server": "npm run dev -w @office/server",
+    "dev": "concurrently -k -n api,web \"npm run dev:agent\" \"npm run dev -w @office/web\"",
+    "dev:server": "npm run dev:agent",
+    "dev:agent": "cd apps/agent && uv run uvicorn office.api:create_app --factory --reload --host 127.0.0.1 --port 3001 --timeout-graceful-shutdown 2",
+    "dev:legacy": "npm run dev -w @office/server",
     "dev:web": "npm run dev -w @office/web",
     "check": "npm run check --workspaces --if-present",
     "build": "npm run build -w @office/web",
-    "test": "npm run test -w @office/server && python3 -m unittest discover -s apps/device/tests",
+    "test": "npm run test:agent && python3 -m unittest discover -s apps/device/tests",
     "contracts:export": "npm run export -w @office/contracts",
+    "procurement:setup": "npm run setup:python",
+    "test:procurement": "uv run --project apps/agent --group dev python -m unittest discover -s apps/procurement/tests -v",
+    "setup:python": "uv sync --project apps/agent --group dev",
+    "test:agent": "cd apps/agent && OFFICE_MODEL=mock TAVILY_API_KEY= uv run --group dev pytest -q",
     "device:simulate": "python3 apps/device/src/bridge.py --simulate --station kitchen --text 'We need coffee'"
   },
   "devDependencies": {

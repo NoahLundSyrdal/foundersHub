@@ -6,17 +6,22 @@ A local hackathon foundation for an office assistant that receives requests from
 
 ## Start locally
 
-Requirements: Node.js **22.13 or newer**, npm, and Python **3.10 or newer**. The backend uses Node's built-in SQLite support; Node may print an experimental-feature warning.
+Requirements: Node.js **22.13 or newer**, npm, **Python 3.12+** and **uv**. The application backend is Python (FastAPI/Pydantic AI/SQLite); the frontend is React/TypeScript.
 
 ```sh
 npm install
+npm run setup:python
 cp .env.example .env
 npm run dev
 ```
 
+The API reload command allows two seconds for graceful shutdown so open event streams do not leave a source reload waiting indefinitely.
+
 Open **http://localhost:5173**. The backend listens on **http://127.0.0.1:3001**. The web app proxies `/api` to the backend. This foundation is intended for local development, without production authentication; keep it bound to loopback.
 
-No API key is needed in the default mock mode. `AGENT_PROVIDER=anthropic` is the optional Claude interpretation adapter: configure `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` in the ignored `.env` file. The example model is `claude-sonnet-5-5`; change it if your API account uses a different supported model. Supplier execution remains simulated regardless of the interpretation provider.
+No API key is needed with `OFFICE_MODEL=mock`. For live Pydantic AI, set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY` in the ignored `.env` file. Supplier execution remains simulated. Optional `TAVILY_API_KEY` enables supplier and FINN discovery.
+
+The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity assessment, exact approval and critical dashboard alerts. See [the procurement guide](docs/procurement.md) for endpoints and configuration. `AGENT_DATABASE_PATH` defaults to `.data/agent.sqlite`, separate from the older TypeScript database.
 
 ## Try the flow
 
@@ -26,7 +31,7 @@ No API key is needed in the default mock mode. `AGENT_PROVIDER=anthropic` is the
 4. Approve that exact proposal. The request receives a **simulated** order confirmation.
 5. Repeat the request to see duplicate handling, or report `The coffee machine is leaking` to create a maintenance ticket.
 
-The dashboard includes a low-stock simulation. A sensor event enters the same request workflow without requiring speech. Browser voice input depends on browser support and microphone permission; typed transcripts are always available.
+The dashboard includes a photo-informed [office twin](docs/digital-twin.md), configurable device placement, and a low-stock simulation. A sensor event enters the same request workflow without requiring speech. Browser voice input depends on browser support and microphone permission; typed transcripts are always available.
 
 You can also simulate a device from another terminal while the backend runs:
 
@@ -40,7 +45,9 @@ See [the demo guide](docs/demo.md) for the full sequence and [hardware notes](do
 
 ```text
 apps/web/                 React dashboard, browser voice input, approvals
-apps/server/              API, request workflow, Claude adapter, SQLite
+apps/agent/               Python API, Pydantic agent, SQLite, approvals, board integration
+apps/server/              Previous TypeScript backend (inactive reference)
+apps/procurement/         Pydantic AI worker, severity and supplier/FINN discovery
 apps/device/              Python USB bridge, simulator, device tests
 packages/contracts/       Shared TypeScript schemas and generated JSON Schema
 config/stations.json      Station locations, equipment, teams, catalogue scope
@@ -61,6 +68,30 @@ The backend owns persistent state and purchase execution. The web app and device
 
 Agree contract changes in `packages/contracts/` before changing callers. Use short-lived branches and integrate early. Keep one integration owner; avoid editing another owner's files without coordinating.
 
+## Agent communication with Hivemind
+
+We use [Hivemind](https://github.com/Leonhest/hivemind) to share task ownership, contracts, decisions, questions, and handoffs between teammates' coding agents. Each teammate installs it once on their own machine:
+
+```sh
+npx hivemind-agents@0.1.14 install
+```
+
+The installer configures detected Claude Code, Codex, and Cursor installations globally. To configure only Codex, use `npx hivemind-agents@0.1.14 install --only=codex`. In Codex, run `/hooks` to review and approve the new hooks, then start a new agent session to load the integration. Restart Cursor if using it.
+
+From this checkout, verify setup and read the plan:
+
+```sh
+hivemind doctor
+hivemind status
+hivemind plan
+```
+
+Claim a task before implementation. Share interface changes before teammates depend on them, update task status when finished or blocked, and use notebook notes for temporary handoffs. The existing ownership and approval rules still apply.
+
+Hivemind requires Node.js 20+, Git, and an `origin` remote; publishing plan updates requires push access. It synchronizes through hidden `refs/hivemind/<member>` refs on the existing remote, independently of code branches. Plan entries are readable by anyone who can read the repository, including publicly for a public repo. Keep secrets and personal data out of them.
+
+Automatic extraction uses your installed agent's login and subscription or API usage. Set `HIVEMIND_EXTRACTOR_BACKEND=none` in the environment launching your agent to use explicit MCP updates only. `hivemind disable` disables sharing for this clone; `hivemind enable` restores it. See the [upstream guide](https://github.com/Leonhest/hivemind#readme) for details.
+
 ## Commands
 
 | Command | Purpose |
@@ -78,12 +109,12 @@ Runtime database files live in ignored `.data/` by default. Stop the backend bef
 
 ## Technology choices
 
-The foundation uses current React/TypeScript tooling, Fastify, schema-validated contracts, and a single SQLite owner so the four developers can integrate quickly. The live Claude path uses the official Anthropic SDK with bounded tool use and streamed progress; the mock path remains available for offline development and deterministic tests. These choices make the system inspectable and extensible, rather than asserting that a framework or model alone makes it state of the art.
+The application uses a Python FastAPI/Pydantic AI backend with one SQLite owner and a React/TypeScript frontend. Three.js renders the office twin. The live Anthropic path has bounded model/tool usage; deterministic mock interpretation remains available without credentials. The older TypeScript API is retained under `npm run dev:legacy` for reference.
 
-The important technical boundaries are explicit tools, validated decisions, approval tied to an exact proposal, persisted execution attempts, and idempotent input. Real-time speech, speaker identity, supplier search, and checkout remain separate integrations. See [the architecture rationale](docs/architecture.md#technology-rationale).
+The important technical boundaries are validated decisions, exact proposal approval, persisted execution attempts, and idempotent input. Optional supplier/FINN discovery is read-only. Live stock telemetry, speaker identity, supplier checkout and contractor booking remain separate integrations. See [the architecture rationale](docs/architecture.md#technology-rationale).
 
 ## What to build next
 
-This foundation uses a fixed approved catalogue, not live search or a quality/price/delivery ranking engine. Real purchasing needs a supplier adapter, confirmed delivery terms, authenticated approval, credentials, and reconciliation of uncertain execution results. Maintenance tickets are local records, not actual contractor bookings.
+The application ranks approved fixture offers by landed price, quality and delivery; those inputs remain simulated. Real purchasing needs a supplier adapter, confirmed delivery terms, authenticated approval, credentials and reconciliation of uncertain execution results. Maintenance tickets are local records; service proposals do not book real contractors.
 
 See [architecture and API contracts](docs/architecture.md), [demo steps](docs/demo.md), and [hardware setup](docs/hardware.md). MCP can expose the same backend capabilities later; it is not required to connect the first three apps.

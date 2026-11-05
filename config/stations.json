@@ -3,21 +3,42 @@
     "id": "kitchen",
     "name": "Kitchen",
     "responsible_team": "Facilities",
-    "equipment": ["coffee machine", "dishwasher"],
-    "item_ids": ["coffee", "cups"]
+    "equipment": [
+      "coffee machine",
+      "dishwasher"
+    ],
+    "item_ids": [
+      "coffee",
+      "cups",
+      "ventilation-service"
+    ]
   },
   {
     "id": "bathroom",
     "name": "Bathroom",
     "responsible_team": "Cleaning team",
-    "equipment": ["toilet", "sink", "soap dispenser"],
-    "item_ids": ["toilet-paper", "soap"]
+    "equipment": [
+      "toilet",
+      "sink",
+      "soap dispenser"
+    ],
+    "item_ids": [
+      "toilet-paper",
+      "soap",
+      "plumbing-service"
+    ]
   },
   {
     "id": "printer",
     "name": "Printer area",
     "responsible_team": "IT support",
-    "equipment": ["printer"],
-    "item_ids": ["printer-paper", "toner"]
+    "equipment": [
+      "printer"
+    ],
+    "item_ids": [
+      "printer-paper",
+      "toner",
+      "printer-service"
+    ]
   }
 ]

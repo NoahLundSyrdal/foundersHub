@@ -52,7 +52,7 @@ Purchase proposals contain the product snapshot, quantity, total, currency, and 
 | `POST /api/requests/:id/approve` | `{ "proposal_fingerprint": "..." }` | Updated request |
 | `POST /api/requests/:id/resolve` | `{}` | Resolved maintenance or delivered purchase request |
 
-Errors use an `error` string and a non-success HTTP status. Exact types and validation live in `packages/contracts/src/index.ts`.
+Python errors use FastAPI’s `detail` field and a non-success HTTP status; the frontend also accepts the older API’s `error` field. Shared dashboard types live in `packages/contracts/src/index.ts`, and the Python app validates inputs at its API and procurement boundaries.
 
 `GET /api/events` emits named `requests.updated` events with JSON data `{ "request_id": "..." }`. The client then refreshes authoritative request state. It is a notification stream, not replayable event storage. Each request can include a `trace` array of `{ stage, detail, at }` entries; those record operational progress and tool activity, not private model reasoning. The web client reconnects with EventSource and retains polling as a fallback.
 
@@ -78,9 +78,11 @@ Supplier execution belongs exclusively to the server. Persist execution state an
 
 ## Providers and extension points
 
-The default interpretation provider is a deterministic mock so all teammates can develop without credentials. The optional Anthropic provider uses the official SDK and a bounded tool loop. Read-only tools provide approved catalogue, office policy, and open-request context; a strict `submit_decision` tool produces the validated interpretation. No tool can spend money or place an order. Enabling the live provider does not enable real purchases.
+The default interpretation provider is a deterministic mock so all teammates can develop without credentials. OFFICE_MODEL selects the Python Pydantic AI model; live Anthropic uses the official SDK. Read-only assessment tools provide approved catalogue, office policy and request context. The validated application plugin executes only simulated orders behind policy and exact deferred approval. Enabling a live model does not enable real purchases.
 
-The fixture catalogue provides approved products, prices, and explicitly unverified demo delivery estimates. Live product search, ranking by price/quality/delivery, supplier checkout, payment, verified delivery, contractor booking, and speaker identification are future work.
+The default application now reuses Leo’s Python FastAPI/Pydantic AI backend in apps/agent. The procurement package supplies structured interpretation, severity and optional Tavily/FINN discovery in process. Python ranks approved fixture offers by landed price, quality and delivery, enforces exact quote approval and records simulated orders and durable alerts. Existing board input/sensor endpoints are retained; the TypeScript dashboard consumes compatibility projections from the same task workflow. Started/uncertain execution attempts require reconciliation. See [procurement](procurement.md) for API shapes, settings, exact quote checks and researched supplier endpoints.
+
+Catalogue prices, quality scores and delivery estimates remain synthetic fixtures. Search snippets are discovery evidence and cannot authorize transactions. Real supplier checkout, payment, verified delivery, actual contractor booking, WhatsApp delivery and speaker identification remain unimplemented.
 
 Implement those as adapters behind the current workflow rather than embedding external calls in the frontend or device bridge. An MCP server could later expose request creation, proposal review, and status through the same application services.
 
@@ -92,8 +94,8 @@ The loopback-only foundation has no production user authentication, multi-office
 
 Use a current model through its official SDK, keep model access behind a provider interface, and make the configured model visible rather than baking model assumptions into workflow code. The mock provider is a development tool, not an alternate claim of live model intelligence. Model access and capabilities must be verified for the team's API account.
 
-Use explicit read-only tools for catalogue, policy, and open-request context. The agent submits a schema-validated decision; it does not receive an unrestricted purchase tool. Bounded iterations and request timeouts keep latency and spend predictable. A future real supplier adapter still belongs behind the application's approval and execution boundary.
+Use read-only tools for catalogue, policy, request context and discovery. The Pydantic AI agent prepares a validated need; the Python application ranks approved offers and binds any execution to the persisted exact quote. The simulated order plugin enforces spending policy and deferred approval before recording an order. Bounded model/tool usage limits keep work finite. A future real supplier adapter belongs behind the same approval and execution boundary.
 
 Stream operational progress to the dashboard so developers and demo viewers can see tool calls and their outcomes. This is an execution trace, not hidden model reasoning. Persist important workflow outcomes in SQLite; a live stream is not a replacement for durable state. Reconnect or polling recovery should refresh authoritative API state.
 
-The modern stack serves a concrete purpose: React and TypeScript for rapid UI integration, shared schemas for typed and runtime boundaries, Fastify for a testable API, and SQLite for local durability without another infrastructure dependency. Browser speech is a convenient optional input path; a dedicated low-latency speech provider and speaker identification are not included.
+The modern stack serves a concrete purpose: React and TypeScript for rapid UI integration, shared schemas for typed and runtime boundaries, FastAPI and Pydantic AI for the Python application API, and SQLite for local durability without another infrastructure dependency. Browser speech is a convenient optional input path; a dedicated low-latency speech provider and speaker identification are not included.

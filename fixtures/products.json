@@ -4,47 +4,74 @@
     "name": "Office coffee · 1 kg",
     "station_id": "kitchen",
     "price_nok": 189,
-    "delivery_estimate": "Demo: 2–4 hours (not verified)",
-    "supplier": "Demo Supplies"
+    "delivery_estimate": "Simulation: 2–4 hours (not verified)",
+    "supplier": "Office Supplies"
   },
   {
     "id": "cups",
     "name": "Paper cups · 100 pack",
     "station_id": "kitchen",
     "price_nok": 79,
-    "delivery_estimate": "Demo: tomorrow",
-    "supplier": "Demo Supplies"
+    "delivery_estimate": "Simulation: tomorrow",
+    "supplier": "Office Supplies"
   },
   {
     "id": "toilet-paper",
     "name": "Toilet paper · 24 rolls",
     "station_id": "bathroom",
     "price_nok": 149,
-    "delivery_estimate": "Demo: tomorrow",
-    "supplier": "Demo Supplies"
+    "delivery_estimate": "Simulation: tomorrow",
+    "supplier": "Office Supplies"
   },
   {
     "id": "soap",
     "name": "Hand soap · 1 litre",
     "station_id": "bathroom",
     "price_nok": 69,
-    "delivery_estimate": "Demo: tomorrow",
-    "supplier": "Demo Supplies"
+    "delivery_estimate": "Simulation: tomorrow",
+    "supplier": "Office Supplies"
   },
   {
     "id": "printer-paper",
     "name": "A4 printer paper · 500 sheets",
     "station_id": "printer",
     "price_nok": 89,
-    "delivery_estimate": "Demo: tomorrow",
-    "supplier": "Demo Supplies"
+    "delivery_estimate": "Simulation: tomorrow",
+    "supplier": "Office Supplies"
   },
   {
     "id": "toner",
-    "name": "Printer toner · demo model",
+    "name": "Printer toner · model to confirm",
     "station_id": "printer",
     "price_nok": 599,
-    "delivery_estimate": "Demo: 2 days",
-    "supplier": "Demo Supplies"
+    "delivery_estimate": "Simulation: 2 days",
+    "supplier": "Office Supplies"
+  },
+  {
+    "id": "ventilation-service",
+    "name": "Ventilation inspection · one site visit",
+    "station_id": "kitchen",
+    "price_nok": 850,
+    "delivery_estimate": "Simulation: 24 hours (not verified)",
+    "supplier": "Office Facilities",
+    "fulfillment_kind": "service"
+  },
+  {
+    "id": "plumbing-service",
+    "name": "Plumber inspection · one site visit",
+    "station_id": "bathroom",
+    "price_nok": 790,
+    "delivery_estimate": "Simulation: 24 hours (not verified)",
+    "supplier": "Office Facilities",
+    "fulfillment_kind": "service"
+  },
+  {
+    "id": "printer-service",
+    "name": "Printer technician · one site visit",
+    "station_id": "printer",
+    "price_nok": 450,
+    "delivery_estimate": "Simulation: 24 hours (not verified)",
+    "supplier": "Office Facilities",
+    "fulfillment_kind": "service"
   }
 ]
