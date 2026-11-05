@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, legacy
+from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import facility_api, oda_food, oda_api, work_api
 from office.facility_rules import FacilityReading
 
@@ -37,7 +37,7 @@ class Decision(BaseModel):
     proposal_fingerprint: str | None = None
 
 
-class DeviceEvent(BaseModel):  # legacy shape still emitted by apps/device/src/bridge.py
+class DeviceEvent(BaseModel):  # shape emitted by apps/device/src/bridge.py
     event_id: str
     station_id: str
     type: str  # button_pressed | speech_transcript | stock_low
@@ -78,7 +78,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.state.facilities = facilities
     app.state.oda_food = groceries
     app.state.work = work
-    app.include_router(legacy.router(conn))
+    app.include_router(requests_api.router(conn))
     app.include_router(facility_api.router(facilities))
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
@@ -160,7 +160,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                             action = incident["action_results"].get("replenish", {})
                             if incident["status"] == "active" and action.get("task_id"):
                                 task = db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id=?", action["task_id"]))
-                                return procurement_workflow.enrich_task(conn, task) | {"command": legacy.response(conn, task["id"])["command"]}
+                                return procurement_workflow.enrich_task(conn, task) | {"command": requests_api.response(conn, task["id"])["command"]}
                         return {"stored": True}
                     return {"stored": True, **result}
                 except ValueError as error:
@@ -218,7 +218,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                     raise HTTPException(409, str(error)) from error
                 if ev.type == "stock_low":
                     await facilities.resume_stock_checks()
-                return legacy.response(conn, seen["task_id"], True)
+                return requests_api.response(conn, seen["task_id"], True)
             if ev.type not in {"button_pressed", "speech_transcript", "stock_low"}:
                 raise HTTPException(400, "Unsupported event type")
             if ev.type == "speech_transcript":
@@ -260,7 +260,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                 await facilities.prepare_stock_check(task_id, board.id, ev.payload["item_id"], ev.payload.get("simulation", True))
             else:
                 await agent.run(conn,task_id,text)
-            result = legacy.response(conn,task_id)
+            result = requests_api.response(conn,task_id)
             conn.execute("UPDATE device_events SET response=? WHERE event_id=?", (json.dumps(result),ev.event_id))
             return result
 
