@@ -62,7 +62,7 @@ Compatible routes:
 | `GET /api/air-quality` | Latest physical kitchen temperature/humidity/CO₂, with stale values returned as unknown |
 | `GET /api/events` | `facility.updated` notifications; clients refresh persisted state |
 
-Temperature aliases are `temperature`, `th_temperature`, `temperature_c`; humidity aliases are `humidity`, `th_humidity`, `humidity_pct`. CO₂ accepts `co2`, `co2_ppm`, and firmware keys containing `co2`. Unknown telemetry keys return `accepted:false`; raw `dist_min_distance` is deliberately not converted to inventory. The hardware owner must forward readings using the chosen mapping; the existing USB bridge currently handles request events rather than all telemetry.
+Temperature aliases are `temperature`, `th_temperature`, `temperature_c`; humidity aliases are `humidity`, `th_humidity`, `humidity_pct`. CO₂ accepts `co2`, `co2_ppm`, and `co2_co2`. Firmware fields `co2_temperature`/`aht20_temperature` map to temperature; `co2_humidity`/`aht20_humidity` map to humidity. Auxiliary module fields are never interpreted as CO₂. Unknown telemetry keys return `accepted:false`; raw `dist_min_distance` is deliberately not converted to inventory. The hardware owner must forward readings using the chosen mapping; the existing USB bridge currently handles request events rather than all telemetry.
 
 Generated portable shapes are `packages/contracts/facility-reading.schema.json`, `facility-rule.schema.json`, and `station-action*.schema.json`; regenerate with `npm run contracts:export` after shared schema edits.
 
@@ -116,3 +116,7 @@ PYTHON
 ```
 
 For a forced test, configure a temporary threshold in this isolated database or send explicitly simulated samples. Do not label generated values as physical readings. Restore the original threshold/recovery settings after testing. The software tests do not claim physical sensor calibration or speaker playback.
+
+## Verified USB threshold test (2026-11-05)
+
+A cable-connected board supplied 62 physical sensor samples to the backend. A temporary CO₂ trigger of 829 ppm with the normal 30-second sustained duration produced exactly one incident, a local test task and one sound command. The board acknowledged LED, screen and speaker handlers, and the user confirmed hearing the three-note chime. A subsequent physical reading satisfied the temporary recovery setting; the incident recovered and the sound delivery was recorded. The original rule was restored exactly: trigger 1,200 ppm, recovery 1,000 ppm, three samples over 30 seconds, alert + ticket actions. The local test task was resolved. This verified the physical pipeline using a deliberately lowered test threshold; it did not demonstrate an actual reading over 1,200 ppm. The sensor quantity aliases were corrected so CO₂-module temperature/humidity can never reset or trigger the CO₂ rule.

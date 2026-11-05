@@ -268,3 +268,16 @@ def test_backend_check_events_are_scoped_without_a_dashboard(facility):
     finally:
         unsubscribe()
     assert "active" in transitions and "recovered" in transitions
+
+@pytest.mark.parametrize("key,value,metric", [
+    ("co2_co2", 987, "co2_ppm"),
+    ("co2_temperature", 29.8, "temperature_c"),
+    ("co2_humidity", 21.4, "humidity_pct"),
+    ("aht20_temperature", 29.0, "temperature_c"),
+    ("aht20_humidity", 24.0, "humidity_pct"),
+])
+def test_observed_firmware_quantity_aliases(facility, key, value, metric):
+    client, clock = facility
+    response = client.post("/api/telemetry", json={"key": key, "value": value, "timestamp": clock[0].isoformat(), "event_id": uuid4().hex})
+    assert response.status_code == 200, response.text
+    assert response.json()["metric"] == metric
