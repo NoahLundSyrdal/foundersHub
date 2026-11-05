@@ -1,0 +1,1 @@
+{"id":"mw3o412h8a963797","member":"noah-lund-syrdal-b43119","lamport":108,"ts":1793890542185,"type":"upsert","kind":"task","key":"twin-python-connection","data":{"title":"Connect the digital twin to Leo's Python API","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["apps/web/src/api.ts","apps/web/src/App.tsx","docs/digital-twin.md"]},"source":"explicit"}
