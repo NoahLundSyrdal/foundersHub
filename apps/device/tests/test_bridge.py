@@ -12,6 +12,40 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    def test_serial_timeout_fragments_preserve_event_and_utf8(self):
+        event = bridge.make_event("kitchen", "speech_transcript", {"text": "Need café supplies"})
+        raw = json.dumps(event, ensure_ascii=False).encode() + b"\r\n"
+        split = raw.index("é".encode()) + 1
+        lines = bridge.SerialLines()
+        self.assertEqual(lines.feed(raw[:split]), [])
+        self.assertEqual(lines.feed(b""), [])  # serial timeout
+        frames = lines.feed(raw[split:])
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(bridge.normalize_message(json.loads(frames[0])), event)
+
+    def test_serial_overlong_frame_discards_suffix_and_recovers(self):
+        lines = bridge.SerialLines(limit=64)
+        valid = b'{"event_type":"button","key":"kitchen","value":true}\n'
+        self.assertEqual(lines.feed(b"x" * 65), [])
+        self.assertEqual(len(lines.pending), 0)
+        # A valid-looking suffix of an oversized frame must never become an event.
+        self.assertEqual(lines.feed(valid), [])
+        self.assertEqual(lines.feed(valid), [valid])
+        self.assertEqual(lines.discarded, 1)
+
+    def test_serial_buffer_is_bounded_while_discarding(self):
+        lines = bridge.SerialLines(limit=64)
+        for _ in range(100):
+            self.assertEqual(lines.feed(b"x" * 32), [])
+            self.assertLessEqual(len(lines.pending), 64)
+        self.assertEqual(lines.discarded, 1)
+        self.assertEqual(lines.feed(b"\n{}\n"), [b"{}\n"])
+
+    def test_serial_limit_includes_line_ending(self):
+        lines = bridge.SerialLines(limit=4)
+        self.assertEqual(lines.feed(b"123\n1234\n{}\n"), [b"123\n", b"{}\n"])
+        self.assertEqual(lines.discarded, 1)
+
     def test_button_wrapper_and_mapping(self):
         event = bridge.normalize_message({"type":"event", "payload":{"event_type":"button", "key":"button_2", "value":True}}, {"button_2":"bathroom"})
         self.assertEqual(event["station_id"], "bathroom")

@@ -111,8 +111,8 @@ def _update(conn, task_id: str, **fields) -> dict:
     sets = ", ".join(f"{k} = ?" for k in fields)
     conn.execute(f"UPDATE tasks SET {sets} WHERE id = ?", (*fields.values(), task_id))
     task = procurement_workflow.enrich_task(conn, db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)))
-    bus.publish("task.updated", task)
-    bus.publish("requests.updated", {"request_id": task_id})
+    bus.publish("task.updated", task, source=conn)
+    bus.publish("requests.updated", {"request_id": task_id}, source=conn)
     return task
 
 

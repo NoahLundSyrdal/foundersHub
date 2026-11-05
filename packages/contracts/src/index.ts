@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { RoomEnvironment } from "./room-environment.js";
+export * from "./room-environment.js";
 export const StationId = z.string().trim().min(1).max(128);
 export const DeviceEventSchema = z
   .object({
@@ -94,7 +96,7 @@ export const ResearchSchema = z.object({
   title: z.string().min(1).max(300),
   url: z.string().url().refine((url) => url.startsWith("https://")),
   snippet: z.string().max(1500),
-  source: z.literal("tavily"),
+  source: z.enum(["tavily", "anthropic_web_search"]),
   executable: z.literal(false),
   marketplace: z.literal("finn").optional(),
 });
@@ -151,6 +153,11 @@ export type OfficeRequest = {
   /** Who must approve, from the company brain's approval routing (Notion). Set by the server, never the model. */
   approval?: { type: "purchase" | "purchase_over_cap" | "contractor" | string; approver: string; reason: string } | null;
   grocery?: GroceryWorkflow | null;
+  environment?: RoomEnvironment;
+  room_workflow?: {
+    state: string; reply: string; recipient_name?: string; message_id?: string; message_body?: string;
+    environment?: RoomEnvironment;
+  };
 };
 export type OdaFoodProposal = {
   kind: "oda_cart"; supplier: "Oda";

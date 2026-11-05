@@ -38,7 +38,9 @@ function parseDevices(value: unknown): TwinDevice[] | null {
 }
 export function loadTwinDevices(): TwinDevice[] {
   try {
-    const raw = localStorage.getItem(storageKey);
+    // Keep saved devices from the earlier local UI without replacing a newer layout.
+    // The v1 entry stays untouched; future explicit saves go to v2.
+    const raw = localStorage.getItem(storageKey) ?? localStorage.getItem("office-twin-devices-v1");
     const devices = raw === null ? defaults() : parseDevices(JSON.parse(raw)) ?? defaults();
     const previousNames: Record<string, string> = { "stage-button": "Demo stage button", "coffee-level-demo": "Coffee level · demo", "bathroom-level-demo": "Paper level · demo" };
     return devices.map((device) => device.name === previousNames[device.id] ? { ...device, name: defaultTwinDevices.find((item) => item.id === device.id)!.name } : device);

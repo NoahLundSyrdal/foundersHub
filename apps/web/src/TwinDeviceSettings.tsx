@@ -25,6 +25,7 @@ function validate(device: TwinDevice): string {
   if (min >= max || !Number.isFinite(max - min)) return "The maximum must be greater than the minimum.";
   if (value < min || value > max) return "The simulated reading must be within the configured range.";
   if (warningBelow < min || warningBelow > max) return "The warning threshold must be within the configured range.";
+  if (![device.position.x, device.position.z].every(Number.isFinite) || device.position.x < -10 || device.position.x > 10 || device.position.z < -7 || device.position.z > 7) return "Choose a position within the office model.";
   return "";
 }
 export function TwinDeviceSettings({ device, stations, placing, onSave, onPlace, onCancelPlace, onRemove, disabled, onTest }: Props) {
@@ -68,6 +69,26 @@ export function TwinDeviceSettings({ device, stations, placing, onSave, onPlace,
       >
         <label htmlFor={`${prefix}-name`}>Name</label>
         <input id={`${prefix}-name`} value={draft.name} maxLength={80} required onChange={(event) => patch({ name: event.target.value })} />
+        <label htmlFor={`${prefix}-preset`}>Position preset</label>
+        <select id={`${prefix}-preset`} value="" onChange={(event) => {
+          const positions: Record<string, { x: number; z: number }> = {
+            stage: { x: -5.65, z: 6.7 }, coffee: { x: 5.25, z: -1.5 }, bathroom: { x: 7.15, z: -5.35 }, printer: { x: 0.55, z: -2.35 },
+          };
+          const position = positions[event.target.value];
+          if (position) patch({ position });
+        }}>
+          <option value="">Choose a position</option>
+          <option value="stage">Stage / front chairs</option><option value="coffee">Coffee counter</option>
+          <option value="bathroom">Bathroom</option><option value="printer">Print station</option>
+        </select>
+        <div className="twin-settings-fields">
+          {(["x", "z"] as const).map((axis) => <div key={axis}>
+            <label htmlFor={`${prefix}-${axis}`}>Position {axis.toUpperCase()}</label>
+            <input id={`${prefix}-${axis}`} type="number" step="any" min={axis === "x" ? -10 : -7} max={axis === "x" ? 10 : 7} required
+              value={Number.isFinite(draft.position[axis]) ? draft.position[axis] : ""}
+              onChange={(event) => patch({ position: { ...draft.position, [axis]: event.target.value === "" ? NaN : Number(event.target.value) } })} />
+          </div>)}
+        </div>
         <label htmlFor={`${prefix}-station`}>Station</label>
         <select id={`${prefix}-station`} value={draft.stationId} onChange={(event) => patch({ stationId: event.target.value as Station["id"] })}>
           {stations.map((station) => (

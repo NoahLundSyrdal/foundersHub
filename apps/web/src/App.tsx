@@ -20,6 +20,7 @@ import { TicketsView } from "./TicketsView";
 import WorkQueue from "./WorkQueue";
 import { ApprovalChannelContext, OdaConnection, OdaFoodOrder } from "./OdaFoodOrder";
 import Development from "./Development";
+import { FacilityRules } from "./FacilityRules";
 
 type Health = {
   approval_channel?: "dashboard" | "whatsapp";
@@ -54,7 +55,7 @@ export function App() {
     [error, setError] = useState(""),
     [connectionError, setConnectionError] = useState(""),
     [streamConnected, setStreamConnected] = useState(false),
-    [view, setView] = useState<"twin" | "tickets" | "history" | "work" | "alerts" | "development">("twin"),
+    [view, setView] = useState<"twin" | "tickets" | "history" | "work" | "alerts" | "development" | "facility">("twin"),
     [where, setWhere] = useState<Station["id"]>("office"),
     [askCount, setAskCount] = useState(0),
     [openCount, setOpenCount] = useState(0);
@@ -238,6 +239,7 @@ export function App() {
         <nav className="views" aria-label="Views">
           <button aria-pressed={view === "development"} onClick={() => setView("development")}>Improve</button>
           <button aria-pressed={view === "work"} onClick={() => setView("work")}>Work</button>
+          <button aria-pressed={view === "facility"} onClick={() => setView("facility")}>Facility checks</button>
           <button aria-pressed={view === "twin"} onClick={() => setView("twin")}>
             Office twin
           </button>
@@ -276,6 +278,7 @@ export function App() {
           onRequest={openTicket}
         />
         {view === "work" && <WorkQueue onOpenRequest={openTicket} />}
+        <FacilityRules visible={view === "facility"} onOpenChecks={() => setView("facility")} onOpenRequest={openTicket} />
         {view === "alerts" && <AlertRules />}
         {view === "development" && <Development />}
         {view === "tickets" && (

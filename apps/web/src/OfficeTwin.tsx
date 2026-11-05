@@ -57,6 +57,7 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
   const [placing, setPlacing] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [update, setUpdate] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
   const roomMarkers = reportMarkers(requests);
@@ -67,6 +68,7 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
   deviceState.current = { devices, selection, placing };
   const viewer = useRef<{
     view: (mode: View) => void;
+    zoom: (delta: number) => void;
     status: (statuses: Record<StationId, OfficeRequest["status"] | undefined>) => void;
     select: (thingIds: string[]) => void;
     reports: (statuses: Statuses) => void;
@@ -219,6 +221,10 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
     resize();
     viewer.current = {
       view: setCameraView,
+      zoom: (delta) => {
+        camera.zoom = THREE.MathUtils.clamp(camera.zoom + delta, controls.minZoom, controls.maxZoom);
+        camera.updateProjectionMatrix();
+      },
       status: (next) => {
         for (const id of ids) {
           const color = statusColor(next[id]);
@@ -452,8 +458,17 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
   }
 
   const latestUpdate = requests.find((request) => request.id === update);
+  useEffect(() => {
+    if (hidden) setExpanded(false);
+  }, [hidden]);
+  useEffect(() => {
+    if (!expanded) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setExpanded(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [expanded]);
   return (
-    <section className="office-twin" aria-label="Office status" hidden={hidden}>
+    <section className={`office-twin ${expanded ? "twin-expanded" : ""}`} aria-label="Office status" hidden={hidden}>
       <div className={`twin-canvas ${placing ? "placing-device" : ""}`} ref={container}>
         {renderError ? (
           <div className="twin-fallback" role="status">{renderError}</div>
@@ -513,6 +528,10 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
         <nav className="views twin-views" aria-label="Camera view">
           <button aria-pressed={view === "perspective"} onClick={() => changeView("perspective")}>3D</button>
           <button aria-pressed={view === "plan"} onClick={() => changeView("plan")}>Floor plan</button>
+          <button aria-label="Zoom out" disabled={!!renderError} onClick={() => viewer.current?.zoom(-0.15)}>−</button>
+          <button aria-label="Reset camera" disabled={!!renderError} onClick={() => changeView(view)}>Reset</button>
+          <button aria-label="Zoom in" disabled={!!renderError} onClick={() => viewer.current?.zoom(0.15)}>+</button>
+          <button aria-pressed={expanded} onClick={() => setExpanded((current) => !current)}>{expanded ? "Close expanded view" : "Expand"}</button>
         </nav>
         {placing && (
           <div className="new-request twin-placing" role="status">
