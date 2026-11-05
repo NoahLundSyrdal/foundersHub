@@ -12,7 +12,7 @@ Library use:
     text = stt.listen(stop="enter")      # push-to-talk: Enter stops recording
 
 CLI:
-    python stt.py                        # Enter to start, speak, Enter (or silence) to stop
+    python stt.py                        # push-to-talk: Enter to start, Enter to stop
     python stt.py --station kitchen      # also POST the transcript to the API
                                          # (air/temperature/CO2 questions are answered
                                          #  from GET /api/air-quality instead; --speak reads aloud)
@@ -38,6 +38,8 @@ from uuid import uuid4
 import numpy as np
 
 SAMPLE_RATE = 16_000
+HALLUCINATIONS = {"thank you", "thanks for watching", "thank you for watching", "takk for at du så på",
+                  "takk for meg", "teksting av nicolai winther", "you", "bye"}
 STATIONS = ("kitchen", "bathroom", "printer")
 
 
@@ -107,6 +109,9 @@ class SpeechToText:
 
         audio: list[np.ndarray] = []
         heard_speech, quiet_since, start = False, None, time.monotonic()
+        noise: list[float] = []  # first ~0.3 s calibrates the room's noise floor
+        loud_run = 0
+        self.last_threshold = threshold
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
                             blocksize=1600, callback=callback):
             while not done.is_set() and time.monotonic() - start < max_seconds:
@@ -116,10 +121,17 @@ class SpeechToText:
                     continue
                 audio.append(chunk)
                 if stop == "silence":
-                    loud = float(np.sqrt(np.mean(chunk ** 2))) > threshold
-                    if loud:
+                    level = float(np.sqrt(np.mean(chunk ** 2)))
+                    if len(noise) < 3:
+                        noise.append(level)
+                        threshold = min(max(threshold, float(np.median(noise)) * 2.0), 0.03)
+                        self.last_threshold = threshold
+                        continue
+                    loud = level > threshold
+                    loud_run = loud_run + 1 if loud else 0
+                    if loud_run >= 3:  # ≥0.3 s of sound = speech, not a single noise blip
                         heard_speech, quiet_since = True, None
-                    elif heard_speech:
+                    elif heard_speech and not loud:
                         quiet_since = quiet_since or time.monotonic()
                         if time.monotonic() - quiet_since >= silence_seconds:
                             break
@@ -162,10 +174,24 @@ class SpeechToText:
             raw = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", audio, "-f", "s16le",
                                   "-ac", "1", "-ar", str(SAMPLE_RATE), "-"], capture_output=True, check=True).stdout
             audio = np.frombuffer(raw, "<i2").astype(np.float32) / 32768
-        segments, _info = self._load_whisper().transcribe(
-            audio, language=self.language, beam_size=1, vad_filter=True,
+        model = self._load_whisper()
+        language = self.language
+        if language is None:  # only choose between Norwegian and English; noise makes free detection wander
+            try:
+                _, _, probs = model.detect_language(audio, vad_filter=True)
+                p = dict(probs)
+                language = "en" if p.get("en", 0) > p.get("no", 0) + p.get("nn", 0) else "no"
+            except Exception:
+                language = "no"
+        self.last_language = language
+        segments, _info = model.transcribe(
+            audio, language=language, beam_size=1, vad_filter=True,
             condition_on_previous_text=False)
-        return " ".join(s.text.strip() for s in segments).strip()
+        text = " ".join(s.text.strip() for s in segments).strip()
+        # Whisper invents these on silence/noise; treat them as "nothing heard".
+        if text.lower().strip(" .!") in HALLUCINATIONS:
+            return ""
+        return text
 
     def listen(self, stop: str = "silence", **record_kwargs) -> str:
         return self.transcribe(self.record(stop=stop, **record_kwargs))
@@ -205,7 +231,8 @@ def main() -> int:
                    help="auto = ElevenLabs if ELEVENLABS_API_KEY is set, else local Whisper")
     p.add_argument("--model", default="small", help="Whisper size: tiny/base/small/medium/large-v3")
     p.add_argument("--language", default=None, help="no / en; default auto-detect")
-    p.add_argument("--stop", choices=("silence", "enter"), default="silence")
+    p.add_argument("--stop", choices=("silence", "enter"), default="enter",
+                   help="enter = push-to-talk (robust in noisy rooms); silence = auto-stop")
     p.add_argument("--file", help="Transcribe an audio file instead of the mic")
     p.add_argument("--station", choices=STATIONS, help="POST each transcript to the API for this station")
     p.add_argument("--api", default="http://127.0.0.1:3001")
