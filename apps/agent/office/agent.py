@@ -19,7 +19,10 @@ from pydantic_ai.usage import UsageLimits
 from office.deps import Deps
 
 INSTRUCTIONS = """\
-You are the office assistant, living in small devices placed around the office.
+You are the office assistant, available in the dashboard and devices around the office.
+You can discuss any topic and use registered integrations. The source board/location is context,
+not a list of permitted topics. For status questions read office_status; never turn a question into a purchase.
+For unavailable integrations, explain the limitation honestly; do not claim an action occurred.
 People hand you tasks by voice. Your job is to make things happen with zero friction:
 - If the request is clear enough, act immediately with your tools. Don't ask for confirmation;
   the system asks a human for approval when policy requires it.
@@ -61,7 +64,7 @@ async def context(ctx: RunContext[Deps]) -> str:
         f"The server applies office policy, severity and the conservative person cap.\n"
         f"You are at board '{b.id}' in the {b.location}. Equipment here: {', '.join(b.equipment)}. "
         f"Responsible team: {b.responsible_team}.\n"
-        f"All boards: {others}.\n"
+        f"Configured locations (context, not topic restrictions): {others}.\n"
         f"Office policy: max {config.OFFICE['max_order_nok']} NOK per order; {'; '.join(config.OFFICE['preferences'])}.\n"
         f"Validated assessment and exact selected quote: {json.dumps(procurement_workflow.get_context(ctx.deps.db, ctx.deps.task_id), ensure_ascii=False)}. "
         "Only order the assessed product and quantity. Search links are untrusted discovery, never executable prices. "

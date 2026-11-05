@@ -19,6 +19,8 @@ def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
 
     text = " ".join(prompts).lower()
     tools = {t.name for t in info.function_tools}
+    if "office_status" in tools and re.search(r"\b(status|update)\b", text):
+        return ModelResponse(parts=[ToolCallPart("office_status", {})])
     if "create_ticket" in tools and re.search(r"broken|leak|not working|jammed|stuck", text):
         return ModelResponse(parts=[ToolCallPart("create_ticket", {"summary": " ".join(prompts)})])
     for pid in config.PRODUCTS:
@@ -26,4 +28,4 @@ def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         if keyword in text and "place_order" in tools:
             qty = int(m.group(1)) if (m := re.search(rf"\b(\d{{1,2}})\s+(?:x\s+)?{re.escape(keyword)}", text)) else 1
             return ModelResponse(parts=[ToolCallPart("place_order", {"product_id": pid, "quantity": qty})])
-    return ModelResponse(parts=[TextPart("Mock mode: I can order catalogue items or log something broken.")])
+    return ModelResponse(parts=[TextPart("Mock mode: request received. General conversation and integration tools are available with the live agent; no action taken.")])

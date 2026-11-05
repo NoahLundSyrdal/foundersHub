@@ -25,6 +25,7 @@ async def create_ticket(ctx: RunContext[Deps], summary: str, team: str | None = 
 async def office_status(ctx: RunContext[Deps]) -> dict:
     """What's currently open in the office: open orders and tickets."""
     return {
+        "pending_approvals": db.rows(ctx.deps.db, "SELECT id, board_id, prompt, reply FROM tasks WHERE status='awaiting_approval'"),
         "open_orders": db.rows(ctx.deps.db, "SELECT product_id, quantity, ref, created_at FROM orders WHERE status = 'simulated'"),
         "open_tickets": db.rows(ctx.deps.db, "SELECT board_id, summary, team, created_at FROM tickets WHERE status = 'open'"),
     }

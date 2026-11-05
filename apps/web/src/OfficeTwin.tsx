@@ -23,7 +23,8 @@ type Props = {
   onRequest: (id: string) => void;
 };
 type Statuses = Record<string, OfficeRequest["status"] | undefined>;
-const ids: StationId[] = ["kitchen", "bathroom", "printer"];
+// Only these locations have geometry; conversation contexts come from the API.
+const ids = ["kitchen", "bathroom", "printer"] as const;
 // The same status colours as the dashboard's dots and agent panel.
 function statusColor(status: OfficeRequest["status"] | undefined): number | null {
   if (status === "processing") return 0xff7f24;

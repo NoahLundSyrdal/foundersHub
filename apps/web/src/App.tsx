@@ -41,7 +41,7 @@ export function App() {
     [connectionError, setConnectionError] = useState(""),
     [streamConnected, setStreamConnected] = useState(false),
     [view, setView] = useState<"twin" | "tickets" | "history" | "work">("twin"),
-    [where, setWhere] = useState<Station["id"]>("kitchen"),
+    [where, setWhere] = useState<Station["id"]>("office"),
     [askCount, setAskCount] = useState(0),
     [openCount, setOpenCount] = useState(0);
   const refreshSequence = useRef(0);

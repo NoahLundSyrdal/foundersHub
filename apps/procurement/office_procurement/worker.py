@@ -46,6 +46,9 @@ def clarify(request: WorkerInput, question: str, assessment: Assessment | None =
 
 def validate_decision(request: WorkerInput, decision: Interpretation) -> Interpretation:
     products = {p.id: p for p in allowed_products(request)}
+    if decision.intent == "conversation":
+        # Conversation never carries an executable procurement decision.
+        return decision.model_copy(update={"item_id": None, "quantity": 1, "question": None, "grocery": None})
     if decision.intent == "grocery":
         if not request.grocery_enabled or decision.grocery is None or decision.item_id is not None or decision.quantity != 1:
             return clarify(request, "Please clarify the food items and pack quantities you need.", decision.assessment)
@@ -63,6 +66,12 @@ def validate_decision(request: WorkerInput, decision: Interpretation) -> Interpr
     return decision
 
 
+def conversation(request: WorkerInput) -> Interpretation:
+    return Interpretation(intent="conversation", item_id=None, summary=request.text[:500], quantity=1, question=None,
+        assessment=Assessment(severity="routine", confidence=0.9, requires_confirmation=False,
+                              reason="Conversation is passed to the office agent; no purchase is authorized."))
+
+
 def mock_interpret(request: WorkerInput) -> Interpretation:
     text = request.text.lower()
     if re.search(r"don't|do not|no need|not missing|not out of|ikke bestill|trenger ikke", text):
@@ -71,6 +80,10 @@ def mock_interpret(request: WorkerInput) -> Interpretation:
         return Interpretation(intent="maintenance", item_id=None, summary=request.text[:500], quantity=1, question=None,
                               assessment=Assessment(severity="critical", confidence=0.9, requires_confirmation=True,
                                                     reason="The request reports a possible immediate safety hazard and requires human review."))
+    if re.search(r"\b(status|update)\b", text):
+        return conversation(request)
+    if re.search(r"\b(hello|hi|explain|explanation)\b|how (?:does|do)|what is", text) and not re.search(r"\b(order|buy|book|need|broken|leak|repair|fix)\b", text):
+        return conversation(request)
     if re.search(r"co2|co₂|ventilat", text) and re.search(r"too low|low co[2₂]|lav", text):
         return clarify(request, "Please confirm the CO2 measurement, unit and threshold. Low CO2 alone does not indicate a ventilation fault.")
     aliases = {
@@ -113,6 +126,10 @@ def mock_interpret(request: WorkerInput) -> Interpretation:
     )
     if maintenance and item not in approved:
         return Interpretation(intent="maintenance", item_id=None, summary=request.text[:500], quantity=1, question=None, assessment=assessment)
+    if re.fullmatch(r"something (?:is )?needed[.!?]?", text):
+        return clarify(request, "What would you like help with?")
+    if item is None and not re.search(r"\b(order|buy|purchase|paper|papir)\b", text):
+        return conversation(request)
     if item not in approved:
         return clarify(request, f"What approved supply or service do you need at {request.station.name}?")
     number = re.search(r"\b(\d+)\s*(?:x\b|packs?\b|bags?\b|units?\b|kg\b|coffee\b|cups?\b|toner\b|soap\b|kaffe\b|kopper\b|såpe\b|rolls?\b)", text)
@@ -217,7 +234,12 @@ async def search_item(context: Context, item_id: str, *, client: httpx.AsyncClie
 def create_agent(model: str | Model) -> Agent[Context, Interpretation]:
     agent = Agent(model, deps_type=Context, output_type=Interpretation, retries=1,
                   instructions=(
-                      "Interpret an office supply or repair request into exactly one structured need. "
+                      "Route office messages: use intent conversation for questions, status checks, planning, onboarding, "
+                      "meetings, other integrations and any topic that is not a purchase or maintenance action. "
+                      "For conversation set item_id and question to null, quantity to 1, grocery to null. "
+                      "Do not restrict discussion to the catalogue, station or its equipment. The office agent handles conversation. "
+                      "A question mentioning a product is not an instruction to buy it. "
+                      "For an actual supply or repair request, interpret exactly one structured need. "
                       "If grocery_enabled is true, food and drinks (including coffee) use intent grocery with item_id null, "
                       "root quantity 1, routine assessment and grocery:{items:[{query,quantity}],summary,question:null}. "
                       "Food query describes the requested food and package constraints; quantity is the explicit requested pack count (1..20). "

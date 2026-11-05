@@ -85,7 +85,9 @@ async def prepare_need(conn, task_id: str, text: str | None):
     stations, products, templates, rules = current_configuration()
     station = next((s for s in stations if s["id"] == task["board_id"]), None)
     if not station:
-        raise ProcurementConflict("Board has no configured procurement station.")
+        board = config.BOARDS[task["board_id"]]
+        station = {"id": board.id, "name": board.location, "responsible_team": board.responsible_team,
+                   "equipment": board.equipment, "item_ids": []}
     requests = open_requests(conn, task_id)
     provider = "mock" if config.MODEL == "mock" else "anthropic"
     from office import oda_food

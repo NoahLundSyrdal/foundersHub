@@ -91,7 +91,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
   function change(next: string) {
     setText(next);
     const guess = guessStation(next);
-    if (guess && !chosen.current) onWhere(guess);
+    if (!chosen.current) onWhere(guess ?? "office");
   }
   async function submit() {
     const message = text.trim();
@@ -134,7 +134,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
         {opened ? "Close chat" : needsReply ? "Open chat · waiting for you" : "Open chat"}
       </button>
       <div className="chat-thread" ref={thread} aria-live="polite">
-        {visible.length === 0 && !sendingShown && <p className="chat-empty">Tell me what’s missing or broken.</p>}
+        {visible.length === 0 && !sendingShown && <p className="chat-empty">Ask a question or tell me what you need help with.</p>}
         {visible.map((request) => (
           <ChatTurn key={request.id} request={request} stationName={stationName(request.station_id)} busy={busy} onApprove={onApprove} onReject={onReject} onRequote={onRequote} onOpenTicket={onOpenTicket} />
         ))}
@@ -159,7 +159,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
             <button type="button" onClick={() => setNewTopic(waiting.id)}>New topic</button>
           </p>
         ) : (
-          <div className="chat-where" role="group" aria-label="Where is this about?">
+          <div className="chat-where" role="group" aria-label="Location context (any topic is welcome)">
             {stations.map((station) => (
               <button
                 key={station.id}
@@ -175,6 +175,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
             ))}
           </div>
         )}
+        <p className="hint">Any topic is welcome. Location adds context.</p>
         <label className="sr-only" htmlFor="chat-message">Message to the agent</label>
         <textarea
           id="chat-message"
@@ -182,7 +183,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
           rows={2}
           value={text}
           maxLength={2000}
-          placeholder={waiting ? "Type your answer" : "We’re out of coffee"}
+          placeholder={waiting ? "Type your answer" : "Ask about anything, or give me a task…"}
           onChange={(event) => change(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {

@@ -34,7 +34,7 @@ export const loopLabel = (request: OfficeRequest) =>
     failed: "Needs attention",
   })[request.status];
 /** A ticket is a real need: something to buy or fix. Everything else stays in the chat. */
-export const isTicket = (request: OfficeRequest) => !!request.intent;
+export const isTicket = (request: OfficeRequest) => !!request.intent && request.intent !== "conversation";
 /** Live on the office view: the agent working now, or a ticket that isn't finished. */
 export const inLoop = (request: OfficeRequest) =>
   request.status === "processing" || (isTicket(request) && request.status !== "resolved");

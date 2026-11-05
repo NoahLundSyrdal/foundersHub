@@ -15,6 +15,8 @@ export type Interpreter = (
 ) => Promise<Interpretation>;
 export const mockInterpret: Interpreter = async (text, station) => {
   const t = text.toLowerCase();
+  if (/\b(status|update)\b/.test(t))
+    return { intent: "conversation", item_id: null, summary: "Mock mode: check the dashboard for current request status.", quantity: 1, question: null };
   if (
     /broken|leak|jammed|not working|ødelagt|lekker|virker ikke|stuck|tett/.test(
       t,
@@ -56,11 +58,11 @@ export const mockInterpret: Interpreter = async (text, station) => {
       question: null,
     };
   return {
-    intent: "clarification",
+    intent: item || /order|buy|purchase|paper|papir/.test(t) ? "clarification" : "conversation",
     item_id: null,
-    summary: text,
+    summary: "Mock mode: general request received; no action taken.",
     quantity: 1,
-    question: `What do you need at ${station.name}? Please name the supply or describe what is broken.`,
+    question: item || /order|buy|purchase|paper|papir/.test(t) ? "Please clarify the item and delivery location for this purchase." : null,
   };
 };
 export { anthropicInterpret, createAnthropicInterpreter } from "./anthropic.js";

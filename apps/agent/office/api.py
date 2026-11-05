@@ -16,7 +16,7 @@ from office.facility_rules import FacilityReading
 
 
 class Input(BaseModel):
-    board_id: str
+    board_id: str = "office"
     text: str | None = None
     audio_b64: str | None = None  # any format OpenAI transcription accepts
     person: str | None = None  # dashboard override / already-identified speaker

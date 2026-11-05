@@ -181,6 +181,10 @@ export function buildApp(
         r.proposal = plan.proposal;
         r.status = "awaiting_approval";
       }
+    } else if (parsed.intent === "conversation") {
+      r.status = "resolved";
+      r.item_id = null;
+      r.question = null;
     } else if (parsed.intent === "maintenance") {
       r.status = "maintenance_open";
       r.assigned_to = station.responsible_team;

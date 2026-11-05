@@ -9,11 +9,8 @@
     },
     "station_id": {
       "type": "string",
-      "enum": [
-        "kitchen",
-        "bathroom",
-        "printer"
-      ]
+      "minLength": 1,
+      "maxLength": 128
     },
     "type": {
       "type": "string",

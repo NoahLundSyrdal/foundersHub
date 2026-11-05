@@ -1,5 +1,5 @@
 import { z } from "zod";
-export const StationId = z.enum(["kitchen", "bathroom", "printer"]);
+export const StationId = z.string().trim().min(1).max(128);
 export const DeviceEventSchema = z
   .object({
     event_id: z.string().min(1).max(128),
@@ -37,7 +37,7 @@ export const AssessmentSchema = z.object({
 });
 export type Assessment = z.infer<typeof AssessmentSchema>;
 export const InterpretationSchema = z.object({
-  intent: z.enum(["purchase", "maintenance", "clarification", "grocery"]),
+  intent: z.enum(["purchase", "maintenance", "clarification", "grocery", "conversation"]),
   item_id: z.string().nullable(),
   summary: z.string().min(1).max(500),
   quantity: z.number().int().min(1).max(20),
