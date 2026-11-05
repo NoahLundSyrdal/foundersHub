@@ -22,19 +22,20 @@ def request_view(conn, task_id: str) -> dict:
         status = ("resolved" if order["status"] == "delivered" else "ordered") if order else (
             ("resolved" if ticket["status"] == "resolved" else "maintenance_open") if ticket else
             # A finished proposal with no order was refused, so nothing is left to do.
-            "resolved" if task.get("proposal") else "needs_clarification")
+            "resolved" if task.get("proposal") or (task.get("grocery") or {}).get("proposal") else "needs_clarification")
     proposal = task.get("proposal")
     return {
         "id": task_id, "station_id": task["board_id"], "user_id": None,
-        "original_text": task["prompt"], "intent": "purchase" if proposal else "maintenance" if ticket else None,
+        "original_text": task["prompt"], "intent": "grocery" if task.get("grocery") else "purchase" if proposal else "maintenance" if ticket else None,
         "status": status, "summary": task.get("reply") or task["prompt"] or "Waiting for your request",
         "question": task.get("reply") if status == "needs_clarification" else None,
         "item_id": proposal["product"]["id"] if proposal else None,
         "proposal": proposal, "supplier_reference": order["ref"] if order else None,
-        "simulation": True, "assigned_to": ticket["team"] if ticket else None,
+        "simulation": not bool(task.get("grocery")), "assigned_to": ticket["team"] if ticket else None,
         "created_at": task["created_at"], "updated_at": task["updated_at"],
         "assessment": task.get("assessment"), "approval_required": task.get("approval_required", True),
         "research": task.get("research", []),
+        "grocery": task.get("grocery"),
     }
 
 
@@ -75,7 +76,7 @@ def router(conn):
 
     async def apply_transcript(task_id: str, body: Transcript):
         current = request_view(conn, task_id)
-        if current["proposal"] or current["status"] not in {"awaiting_input", "needs_clarification", "failed"}:
+        if current["proposal"] or (current.get("grocery") or {}).get("proposal") or current["status"] not in {"awaiting_input", "needs_clarification", "failed"}:
             raise HTTPException(409, "Request already has an action")
         if not body.text.strip():
             raise HTTPException(400, "Transcript must not be blank")
@@ -90,12 +91,13 @@ def router(conn):
 
     async def apply_approval(task_id: str, body: Approval):
         current = request_view(conn, task_id)
-        if not current["proposal"] or body.proposal_fingerprint != proposal_fingerprint(current["proposal"]):
+        proposal = current["proposal"] or (current.get("grocery") or {}).get("proposal")
+        if not proposal or body.proposal_fingerprint != proposal_fingerprint(proposal):
             raise HTTPException(409, "Proposal changed; review it again")
         if current["status"] == "ordered":
             return current
         try:
-            await agent.decide(conn, task_id, True)
+            await agent.decide(conn, task_id, True, body.proposal_fingerprint)
         except agent.StaleApproval as error:
             raise HTTPException(409, str(error)) from error
         return request_view(conn, task_id)
@@ -109,6 +111,11 @@ def router(conn):
                 raise HTTPException(409, "Only a request awaiting approval can be rejected")
             if db.row(conn, "SELECT 1 FROM procurement_attempts WHERE task_id=?", task_id):
                 raise HTTPException(409, "Execution was attempted; reconcile it first")
+            if current.get("grocery"):
+                if db.row(conn, "SELECT 1 FROM oda_cart_attempts WHERE task_id=?", task_id):
+                    raise HTTPException(409, "Cart update was attempted; reconcile it first")
+                await agent.decide(conn, task_id, False, proposal_fingerprint(current["grocery"]["proposal"]))
+                return request_view(conn, task_id)
             reply = "Not ordered: the proposal was rejected."
             db.set_command(conn, current["station_id"], reply, "amber")
             agent._update(conn, task_id, status="done", reply=reply, pending="[]")

@@ -3,6 +3,7 @@ import type { OfficeRequest, Station } from "@office/contracts";
 import { isMerged, isTicket, loopLabel, money, requestTitle, stamp, statusLabels, statusTone } from "./format";
 import { ProposalActions, type ProposalHandlers } from "./ProposalActions";
 import "./tickets.css";
+import { OdaFoodOrder } from "./OdaFoodOrder";
 
 const RESOLVED_SHOWN = 6;
 type Props = {
@@ -83,6 +84,7 @@ function Ticket({ request, station, highlighted, openCount, busy, onApprove, onR
           {proposal && <div><dt>Total</dt><dd>{money(proposal.total_nok)} (simulated)</dd></div>}
           {request.supplier_reference && <div><dt>Reference</dt><dd><code>{request.supplier_reference}</code> (simulated)</dd></div>}
         </dl>
+        <OdaFoodOrder request={request} busy={busy} />
         {request.status === "failed" && proposal && (
           <div className="alert error">Order outcome uncertain. Check the supplier before attempting another purchase. Retrying is disabled.</div>
         )}

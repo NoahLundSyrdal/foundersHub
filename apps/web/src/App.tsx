@@ -14,6 +14,7 @@ import { HistoryView } from "./HistoryView";
 import { OfficeTwin } from "./OfficeTwin";
 import { ProcurementAlerts } from "./ProcurementAlerts";
 import { TicketsView } from "./TicketsView";
+import { OdaConnection, OdaFoodOrder } from "./OdaFoodOrder";
 
 type Health = {
   agent_provider?: string;
@@ -185,6 +186,7 @@ export function App() {
         stationName={stations.find((s) => s.id === focus?.station_id)?.name}
         offline={!!connectionError}
       >
+        {focus?.grocery && <OdaFoodOrder request={focus} busy={busy} perform={perform} />}
         <AgentChat
           requests={requests}
           stations={stations}
@@ -211,6 +213,7 @@ export function App() {
         />
       </AgentStage>
       <main className={`work ${view === "twin" ? "work-twin" : ""}`}>
+        <OdaConnection />
         {connectionError && (
           <div role="alert" className="alert error">
             Backend unavailable: {connectionError}. Start the API with{" "}

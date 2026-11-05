@@ -6,7 +6,7 @@ import json
 _subscribers: set[asyncio.Queue] = set()
 
 
-def publish(event: str, data: dict) -> None:
+def publish(event: str, data: dict, *, source=None) -> None:
     msg = f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
     for q in list(_subscribers):
         q.put_nowait(msg)

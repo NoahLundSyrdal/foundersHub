@@ -37,12 +37,16 @@ export const AssessmentSchema = z.object({
 });
 export type Assessment = z.infer<typeof AssessmentSchema>;
 export const InterpretationSchema = z.object({
-  intent: z.enum(["purchase", "maintenance", "clarification"]),
+  intent: z.enum(["purchase", "maintenance", "clarification", "grocery"]),
   item_id: z.string().nullable(),
   summary: z.string().min(1).max(500),
   quantity: z.number().int().min(1).max(20),
   question: z.string().nullable(),
   assessment: AssessmentSchema.optional(),
+  grocery: z.object({
+    items: z.array(z.object({ query: z.string().min(1).max(160), quantity: z.number().int().min(1).max(20) })).max(10),
+    summary: z.string().max(500), question: z.string().max(500).nullable().optional(),
+  }).nullable().optional(),
 });
 export type Interpretation = z.infer<typeof InterpretationSchema>;
 export type Product = {
@@ -115,6 +119,7 @@ export type RequestStatus =
   | "needs_clarification"
   | "maintenance_open"
   | "ordered"
+  | "checkout_ready"
   | "resolved"
   | "failed";
 export type DeviceCommand = {
@@ -134,7 +139,7 @@ export type OfficeRequest = {
   item_id: string | null;
   proposal: Proposal | null;
   supplier_reference: string | null;
-  simulation: true;
+  simulation: boolean;
   assigned_to: string | null;
   created_at: string;
   updated_at: string;
@@ -142,6 +147,19 @@ export type OfficeRequest = {
   research?: Research[];
   assessment?: Assessment;
   approval_required?: boolean;
+  grocery?: GroceryWorkflow | null;
+};
+export type OdaFoodProposal = {
+  kind: "oda_cart"; supplier: "Oda";
+  lines: { product_id: number; name: string; quantity: number; unit_price_nok: number;
+    line_total_nok: number; query: string; url?: string }[];
+  subtotal_nok: number; currency: "NOK"; expires_at: string;
+  checkout_required: true; delivery_fees_pending: true; reason: string;
+};
+export type GroceryWorkflow = {
+  proposal: OdaFoodProposal | null; cart_url: string | null;
+  state: "connection_required" | "needs_clarification" | "awaiting_approval" | "cart_ready" | "failed" | "uncertain";
+  question?: string; connect_url?: string;
 };
 export type Alert = {
   id: string; request_id: string; severity: "urgent" | "critical";
@@ -180,6 +198,6 @@ export type SensorResponse = {
   duplicate: boolean;
 };
 // This exact snapshot must be presented by the UI and approved unchanged.
-export function proposalFingerprint(proposal: Proposal): string {
+export function proposalFingerprint(proposal: Proposal | OdaFoodProposal): string {
   return JSON.stringify(proposal);
 }

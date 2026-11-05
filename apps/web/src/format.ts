@@ -1,6 +1,7 @@
 import type { OfficeRequest } from "@office/contracts";
 
 export const statusLabels: Record<OfficeRequest["status"], string> = {
+  checkout_ready: "Ready for Oda checkout",
   processing: "Agent working",
   awaiting_input: "Waiting for details",
   awaiting_approval: "Needs approval",
@@ -28,6 +29,7 @@ export const loopLabel = (request: OfficeRequest) =>
     needs_clarification: "Waiting for your answer",
     maintenance_open: `With ${request.assigned_to ?? "the team"}`,
     ordered: "Waiting for delivery",
+    checkout_ready: "Review delivery and pay on Oda",
     resolved: "Resolved",
     failed: "Needs attention",
   })[request.status];
@@ -43,6 +45,7 @@ const urgency: OfficeRequest["status"][] = [
   "needs_clarification",
   "awaiting_input",
   "maintenance_open",
+  "checkout_ready",
   "ordered",
   "resolved",
 ];

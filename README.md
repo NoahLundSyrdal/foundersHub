@@ -2,7 +2,7 @@
 
 A local hackathon foundation for an office assistant that receives requests from physical stations, turns them into purchase proposals or maintenance tickets, and tracks the outcome.
 
-**Default mode is simulated.** No payment, supplier order, plumber booking, or message to a third party is performed. Catalogue prices and delivery estimates are fixtures. Speaker identification is not implemented.
+**Food uses Oda after account connection.** Review a live priced basket, approve adding it to your real cart, then complete delivery and payment on Oda. Other supplier execution and catalogue delivery estimates remain simulated.
 
 ## Start locally
 
@@ -118,3 +118,9 @@ The important technical boundaries are validated decisions, exact proposal appro
 The application ranks approved fixture offers by landed price, quality and delivery; those inputs remain simulated. Real purchasing needs a supplier adapter, confirmed delivery terms, authenticated approval, credentials and reconciliation of uncertain execution results. Maintenance tickets are local records; service proposals do not book real contractors.
 
 See [architecture and API contracts](docs/architecture.md), [demo steps](docs/demo.md), and [hardware setup](docs/hardware.md). MCP can expose the same backend capabilities later; it is not required to connect the first three apps.
+
+## Food on Oda
+
+Use **Connect Oda** in the dashboard, finish sign-in/consent, then ask for explicit products and pack quantities, for example: `Order 2 packs of ground coffee, 500g each, and 1 carton of whole milk, 1 litre`. Set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY` for live interpretation. Review the basket and click **Add these products to Oda cart**. Delivery fees and the delivery slot are confirmed when you **Review delivery and pay on Oda**. Cart preparation does not place an order.
+
+`ODA_FOOD_ENABLED=true` is the default. Credentials stay in ignored `.data/oda/oauth.json`. Account signup/consent and a real cart test are deferred; automated tests use injected provider responses. See [the procurement guide](docs/procurement.md#food-through-the-official-oda-mcp).

@@ -38,12 +38,37 @@ class OpenRequest(StrictModel):
     status: str = Field(max_length=40)
 
 
+class GroceryItem(StrictModel):
+    query: str = Field(min_length=1, max_length=160)
+    quantity: int = Field(ge=1, le=20, strict=True)
+
+    @field_validator("query")
+    @classmethod
+    def meaningful_query(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("A food search query is required")
+        return value.strip()
+
+
+class GroceryNeed(StrictModel):
+    items: list[GroceryItem] = Field(max_length=10)
+    summary: str = Field(max_length=500)
+    question: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def items_or_question(self) -> "GroceryNeed":
+        if not self.items and not (self.question and self.question.strip()):
+            raise ValueError("Food items or a clarification question are required")
+        return self
+
+
 class WorkerInput(StrictModel):
     text: str = Field(min_length=1, max_length=2000)
     station: Station
     catalogue: list[Product] = Field(max_length=100)
     policy: Policy
     open_requests: list[OpenRequest] = Field(default_factory=list, max_length=500)
+    grocery_enabled: bool = False
     provider: Literal["mock", "anthropic"] = "anthropic"
     model: str | None = Field(default=None, max_length=128)
 
@@ -62,12 +87,13 @@ class Assessment(StrictModel):
 
 
 class Interpretation(StrictModel):
-    intent: Literal["purchase", "maintenance", "clarification"]
+    intent: Literal["purchase", "maintenance", "clarification", "grocery"]
     item_id: str | None
     summary: str = Field(min_length=1, max_length=500)
     quantity: int = Field(ge=1, le=20, strict=True)
     question: str | None
     assessment: Assessment
+    grocery: GroceryNeed | None = None
 
 
 class Research(StrictModel):

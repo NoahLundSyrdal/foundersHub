@@ -3,12 +3,13 @@
 import base64
 import asyncio
 import json
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from office import agent, bus, config, db, voice, procurement_workflow, legacy
+from office import agent, bus, config, db, voice, procurement_workflow, legacy, oda_food, oda_api
 
 
 class Input(BaseModel):
@@ -39,13 +40,24 @@ class DeviceEvent(BaseModel):  # legacy shape still emitted by apps/device/src/b
 
 def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     conn = db.connect(db_path)
-    app = FastAPI(title="Office agent")
+    groceries = oda_food.service(conn)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            yield
+        finally:
+            oda_food.release(conn)
+
+    app = FastAPI(title="Office agent", lifespan=lifespan)
     procurement_workflow.ensure_schema(conn)
     agent.recover_interrupted(conn)
     mutation_lock = asyncio.Lock()
     app.state.conn = conn
     app.state.mutation_lock = mutation_lock
+    app.state.oda_food = groceries
     app.include_router(legacy.router(conn))
+    app.include_router(oda_api.router(groceries))
 
     def board_or_404(board_id: str) -> config.Board:
         if board_id not in config.BOARDS:

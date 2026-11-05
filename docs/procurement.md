@@ -1,6 +1,27 @@
 # Procurement, severity and alerts
 
-Both spoken/typed needs and deterministic sensor triggers use the server-owned workflow. Pydantic AI interprets the need and assesses severity; application code compares offers, enforces policy and owns execution. **All quote data and order/service execution remain simulated.** Live interpretation/search does not enable payment, bookings or seller contact.
+Both spoken/typed needs and deterministic sensor triggers use the server-owned workflow. Pydantic AI interprets the need and assesses severity; application code compares offers, enforces policy and owns execution. **Food uses live Oda products and real cart additions after account connection and exact basket approval.** Other supplier quotes and order/service execution remain simulated. Payment and order placement happen on Oda.
+
+## Food through the official Oda MCP
+
+`ODA_FOOD_ENABLED=true` (default) routes food and drink requests, including coffee, to [Oda's official MCP](https://oda.com/mcp?lang=en). Click **Connect Oda** in the dashboard and complete Oda sign-in/consent. No Oda API key is needed. The OAuth public client uses PKCE, scope `mcp`, and the fixed callback `http://127.0.0.1:3001/api/integrations/oda/callback`. Run the documented loopback backend on port 3001. Credentials are saved only in ignored `.data/oda/oauth.json` (file 0600, directory 0700); they are never sent to the model or dashboard.
+
+Example: `Order 2 packs of ground coffee, 500g each, and 1 carton of whole milk, 1 litre`. The structured interpretation extracts food queries and pack counts; Oda `product_search` supplies real IDs, names, prices and availability. One bounded Pydantic AI selection chooses suitable products. Application code validates returned IDs, exact quantities, decimal prices and the office product subtotal cap. Vague `order food` asks what products and quantities are wanted; it does not invent meals or dietary requirements. Delivery fees and slots remain pending until Oda checkout. No ratings, stock or delivery promises are invented.
+
+The dashboard shows the exact basket snapshot for approval. Approval checks its fingerprint, 15-minute expiry, current office cap and fresh Oda stock/prices before a cart update. The server persists an attempt first, reads the existing cart, then adds positive quantity deltas through `manipulate_cart`; unrelated items are preserved. A timeout or restart after dispatch leaves the attempt uncertain. Rechecking reads the cart and reconciles the expected quantities, without resending the addition. Equivalent prepared/uncertain baskets are blocked. A changed price or unavailable product requires fresh review.
+
+The result is `checkout_ready`, **not an order**: click **Review delivery and pay on Oda**. Oda's MCP does not expose checkout/payment. No `orders` row or supplier-order reference is created for cart preparation. Live account authorization/product search/cart changes still require validation against the user's Oda account; automated tests use injected responses and do not touch a real account.
+
+| Endpoint | Role |
+| --- | --- |
+| `GET /api/integrations/oda` | Safe connection status and connect URL |
+| `GET /api/integrations/oda/connect` | Register local OAuth client and redirect to Oda consent |
+| `GET /api/integrations/oda/callback` | Single-use PKCE callback; redirect back to dashboard |
+| `POST /api/input` | Existing board/text input; grocery workflow appears as optional `grocery` |
+| `POST /api/tasks/{id}/decide` | Exact `proposal_fingerprint` required before real cart mutation |
+| `POST /api/requests/{id}/approve` | Dashboard compatibility route for the same reviewed snapshot |
+
+Set `ODA_FOOD_ENABLED=false` only for the older fixture food flow. Deterministic sensor replenishment retains its existing fixed catalogue rules; real Oda cart writes require an explicit reviewed food request.
 
 ## Run Leo's Python app
 
