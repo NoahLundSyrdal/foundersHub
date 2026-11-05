@@ -22,10 +22,10 @@ from bridge import make_event, post_event  # same event contract + retry-with-sa
 STATIONS = ("kitchen", "bathroom", "printer")
 COLORS = {"blue": (0, 0, 255), "amber": (255, 120, 0), "green": (0, 255, 0), "red": (255, 0, 0)}
 SENSORS = {  # event key -> (sensor kind, min seconds between posts)
-    "aht20_temperature": ("temperature", 60),
-    "aht20_humidity": ("humidity", 60),
+    "aht20_temperature": ("temperature", 5),
+    "aht20_humidity": ("humidity", 5),
     "distance_sensor_min_distance": ("distance_mm", 5),
-    "co2_co2": ("co2_ppm", 60),
+    "co2_co2": ("co2_ppm", 5),
 }
 SENSOR_STATION = "kitchen"  # which station's board the sensors belong to; change if they move
 
