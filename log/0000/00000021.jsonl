@@ -1,0 +1,1 @@
+{"id":"mw3o40643255124f","member":"anders03-vestrum-0b12cc","lamport":108,"ts":1793890541020,"type":"upsert","kind":"task","key":"hardware-office-event-feedback","data":{"status":"doing","owner":"anders03-vestrum-0b12cc","areas":["apps/device/firmware/office_station/project.yaml","atech firmware"]},"source":"explicit"}
