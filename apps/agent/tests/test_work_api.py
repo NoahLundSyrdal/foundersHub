@@ -125,6 +125,34 @@ def test_linked_replenishment_receipt_updates_inventory_once_then_requires_close
     assert len(api.get("/api/state").json()["orders"]) == 1
 
 
+def test_declined_purchase_ends_linked_work_without_recording_receipt(api):
+    task, work = coffee(api)
+    post(api, f"/api/requests/{task['id']}/reject")
+    assert latest(api, work)["status"] == "cancelled"
+    assert api.get("/api/work/inventory").json()["items"] == []
+    assert api.get("/api/state").json()["orders"] == []
+
+
+def test_preexecution_failure_ends_old_approval_and_allows_fresh_work(api, monkeypatch):
+    task, work = coffee(api)
+
+    async def unavailable(*args, **kwargs):
+        raise RuntimeError("provider unavailable before execution")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(agent.office_agent, "run", unavailable)
+        failed = post(api, f"/api/requests/{task['id']}/approve", {
+            "proposal_fingerprint": proposal_fingerprint(task["proposal"])})
+    assert failed["status"] == "failed"
+    assert latest(api, work)["status"] == "failed"
+    assert api.get("/api/work/inventory").json()["items"] == []
+    assert api.get("/api/state").json()["orders"] == []
+    fresh, new_work = coffee(api)
+    assert fresh["id"] != task["id"]
+    assert new_work["id"] != work["id"]
+    assert new_work["status"] == "awaiting_approval"
+
+
 @pytest.mark.parametrize("legacy_route", ["delivered", "resolve"])
 def test_legacy_delivery_backfills_receipt_inventory_exactly_once(api, legacy_route):
     task, work = coffee(api)

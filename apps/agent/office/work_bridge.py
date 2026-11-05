@@ -50,10 +50,22 @@ class WorkBridge:
             ticket = db.row(self.conn, "SELECT * FROM tickets WHERE task_id=? ORDER BY rowid DESC LIMIT 1", task["id"])
             is_service = bool(ticket or (proposal or {}).get("fulfillment_kind") == "service" or
                 (order and config.PRODUCTS.get(order["product_id"], {}).get("fulfillment_kind") == "service"))
-            if not proposal and not order and not ticket:
-                continue
             source_id = "task:" + task["id"]
             link = db.row(self.conn, "SELECT * FROM office_work_links WHERE source_id=?", source_id)
+            attempt = db.row(self.conn, "SELECT state FROM procurement_attempts WHERE task_id=?", task["id"])
+            if link and not order and not ticket and not attempt and task["status"] in {"done", "failed"}:
+                # A declined quote or failure before execution must not leave an
+                # old approval waiting forever. This never establishes delivery.
+                work = self.service.get(link["work_id"])
+                if work["status"] not in TERMINAL:
+                    work["status"] = "failed" if task["status"] == "failed" else "cancelled"
+                    work["waiting_reason"] = None
+                    work["next_review_at"] = None
+                    self._save(work, "Purchasing ended before execution; no order was placed")
+                    changed = True
+                continue
+            if not proposal and not order and not ticket:
+                continue
             signature = canonical({"status": task["status"], "proposal": proposal, "order": order, "ticket": ticket})
             with self.service._atomic():
                 if link:
