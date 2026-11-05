@@ -1,12 +1,14 @@
 import { useState, type ReactNode } from "react";
 import type { OfficeRequest, Station } from "@office/contracts";
 import { byUrgency, inLoop, isMerged, isTicket, loopLabel, mostUrgent, requestTitle, stamp, statusTone } from "./format";
+import { EnvironmentReadings, type EnvironmentState } from "./EnvironmentReadings";
 import { TwinDeviceSettings } from "./TwinDeviceSettings";
 import type { TwinDevice } from "./twinDevices";
 import { thingById, thingForRequest, type StationId, type TwinThing } from "./twinThings";
 
 export type TwinSelection = { type: "station" | "thing" | "device"; id: string } | null;
 type Props = {
+  environment: EnvironmentState;
   selection: TwinSelection;
   stations: Station[];
   requests: OfficeRequest[];
@@ -175,6 +177,7 @@ function Details(props: Props & { thing?: TwinThing; device?: TwinDevice; statio
           <meter min={device.tracking.min} max={device.tracking.max} value={device.tracking.value} aria-label={`${device.tracking.label}, simulated`} />
         </div>
       )}
+      {device?.kind === "level" && <EnvironmentReadings boardId={device.stationId} location={station?.name ?? device.stationId} state={props.environment} />}
       {station || thing ? (
         <section aria-label="Reports">
           {related.length === 0 ? (

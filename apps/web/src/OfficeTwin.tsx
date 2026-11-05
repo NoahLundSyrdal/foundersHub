@@ -8,6 +8,7 @@ import { createTwinDevice, loadTwinDevices, saveTwinDevices, type TwinDevice } f
 import { createDeviceMesh, disposeDeviceMeshes, isOfficeFloor } from "./twinDeviceScene";
 import { isLow, reading, stationRequests, TwinInspector, type TwinSelection } from "./TwinInspector";
 import { reportMarkers, roomAt, thingById, thingForRequest, thingsAt, type StationId } from "./twinThings";
+import { useEnvironment } from "./useEnvironment";
 import "./office-twin.css";
 
 type View = "perspective" | "plan";
@@ -46,6 +47,7 @@ function openStatuses(requests: OfficeRequest[]) {
 }
 
 export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSimulatePress, onSimulateReport, onAsk, onRequest }: Props) {
+  const environment = useEnvironment(hidden);
   const [selection, setSelection] = useState<TwinSelection>(null);
   const [view, setView] = useState<View>("perspective");
   const [renderError, setRenderError] = useState("");
@@ -535,6 +537,7 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
         )}
       </div>
       <TwinInspector
+        environment={environment}
         selection={selection}
         stations={stations}
         requests={requests}
