@@ -167,7 +167,10 @@ class SpeechToText:
                       headers={"xi-api-key": self.eleven_key,
                                "Content-Type": f"multipart/form-data; boundary={boundary}"})
         with urlopen(req, timeout=20) as resp:
-            return json.load(resp).get("text", "").strip()
+            result = json.load(resp)
+        code = str(result.get("language_code") or "").lower()
+        self.last_language = "en" if code.startswith("en") else "no" if code[:2] in ("no", "nb", "nn", "da", "sv") else None
+        return result.get("text", "").strip()
 
     def _transcribe_whisper(self, audio: np.ndarray | str) -> str:
         if isinstance(audio, str):  # decode via ffmpeg (avoids PyAV version issues)
@@ -210,6 +213,52 @@ def air_quality(api: str) -> dict:
     """GET /api/air-quality → {level, readings, issues, summary, stale}."""
     with urlopen(api.rstrip("/") + "/api/air-quality", timeout=5) as resp:
         return json.load(resp)
+
+
+NORWEGIAN_HINTS = (" er ", " det ", " hvor", " luft", " varmt", " kaldt", " vi ", " jeg ", "dårlig", " ikke ", " og ")
+
+
+def answer_language(text: str, detected: str | None) -> str:
+    """'no' or 'en' for the reply: the STT's detected language, else a word heuristic."""
+    if detected in ("no", "en"):
+        return detected
+    t = f" {text.lower()} "
+    return "no" if any(h in t for h in NORWEGIAN_HINTS) else "en"
+
+
+def air_summary(aq: dict, lang: str = "en") -> str:
+    """Spoken air-quality answer in Norwegian or English, built from the API's readings."""
+    if lang != "no":
+        return aq["summary"]
+    r = aq.get("readings") or {}
+    if aq.get("level") == "unknown" or not any(r.values()):
+        return "Jeg har ingen målinger ennå. Sjekk at sensoren er koblet til."
+    verdict = {"good": "Luftkvaliteten er god", "moderate": "Luftkvaliteten er grei, men ikke helt optimal",
+               "poor": "Luftkvaliteten er dårlig"}.get(aq["level"], "Luftkvaliteten er ukjent")
+    fmt = lambda v, d: f"{v:.{d}f}".replace(".", ",")
+    parts, tips = [], []
+    if r.get("temperature_c"):
+        t = r["temperature_c"]["value"]; parts.append(f"{fmt(t, 1)} grader")
+        if t > 24: tips.append("det er for varmt, skru ned varmen eller luft ut")
+        elif t < 19: tips.append("det er litt kaldt")
+    if r.get("humidity_pct"):
+        h = r["humidity_pct"]["value"]; parts.append(f"{fmt(h, 0)} prosent luftfuktighet")
+        if h < 25: tips.append("luften er tørr")
+        elif h > 60: tips.append("luften er fuktig")
+    if r.get("co2_ppm"):
+        c = r["co2_ppm"]["value"]; parts.append(f"CO2 på {fmt(c, 0)} ppm")
+        if c > 1000: tips.append("CO2-nivået er høyt, åpne et vindu")
+    text = f"{verdict}: {', '.join(parts)}."
+    if tips:
+        text += " " + "; ".join(tips).capitalize() + "."
+    if aq.get("stale"):
+        text += " Merk at målingene er mer enn to minutter gamle."
+    return text
+
+
+def speak(text: str, lang: str = "en") -> None:
+    """Read text aloud with a matching macOS voice (Nora for Norwegian)."""
+    subprocess.run(["say", "-v", "Nora", text] if lang == "no" else ["say", text], check=False)
 
 
 def post_transcript(api: str, station: str, text: str) -> dict:
@@ -262,9 +311,11 @@ def main() -> int:
         if text and is_air_question(text) and (args.station or args.air):
             try:
                 aq = air_quality(args.api)
-                print(f"🌡  [{aq['level']}] {aq['summary']}")
+                lang = answer_language(text, getattr(stt, "last_language", None))
+                answer = air_summary(aq, lang)
+                print(f"🌡  [{aq['level']}] {answer}")
                 if args.speak:
-                    subprocess.run(["say", aq["summary"]], check=False)
+                    speak(answer, lang)
             except Exception as exc:
                 print(f"→ Air-quality lookup failed: {exc}", file=sys.stderr)
         elif text and args.station:
