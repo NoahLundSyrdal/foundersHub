@@ -1,0 +1,1 @@
+{"id":"mw3npvzm91014170","member":"noah-lund-syrdal-b43119","lamport":75,"ts":1793889882418,"type":"upsert","kind":"task","key":"python-backend-migration","data":{"title":"Migrate backend app/API to Python with TypeScript frontend","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["apps/server","package.json","README.md","docs/architecture.md"]},"source":"explicit"}
