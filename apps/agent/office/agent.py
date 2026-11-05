@@ -207,6 +207,10 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
     except Exception as e:  # Surface failure without undoing a staged action.
         if config.MODEL != "mock":
             current = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
+            room = rooms._load(task_id) if rooms else None
+            if room and room.get("message_id"):
+                bus.publish("conversation.failed", {"task_id": task_id, "error": type(e).__name__})
+                return rooms._update(task_id, room, room["state"], room["reply"])
             if current["status"] != "running":
                 from office import conversation
                 bus.publish("conversation.failed", {"task_id": task_id, "error": type(e).__name__})

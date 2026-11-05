@@ -8,6 +8,7 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart, Us
 from pydantic_ai.models.function import FunctionModel
 
 from office import config, conversation, db, environment_queries, procurement_workflow
+from office import agent
 from office.api import create_app
 
 
@@ -230,6 +231,20 @@ def test_new_room_interval_preserves_existing_queued_message(live):
         assert say(client, "Sjekk Fokus til et annet møte i stedet.", conversation_id=first["id"], event_id="new-interval")["id"] == second["id"]
     old = app.state.rooms._load(first["id"])
     assert old["message_id"] == "persisted-message" and old["state"] == "queued"
+
+
+def test_provider_failure_preserves_queued_room_conversation(live):
+    client, app, _ = live
+    task_id = agent.start_task(app.state.conn, "kitchen", "unknown", "Existing room conversation")
+    value = {"board_id": "kitchen", "requester_name": "a colleague", "state": "queued", "reply": "Message queued",
+             "message_id": "persisted-message", "history": [], "trace": []}
+    app.state.rooms._update(task_id, value, "queued", "Message queued")
+    def failure(messages, info):
+        raise RuntimeError("provider unavailable")
+    with conversation.assistant.override(model=FunctionModel(failure)):
+        result = say(client, "Har meldingen kommet fram?", conversation_id=task_id)
+    assert result["status"] == "running" and result["room_workflow"]["state"] == "queued"
+    assert result["room_workflow"]["message_id"] == "persisted-message"
 
 
 def test_live_proposal_preserves_merged_work_and_whatsapp_confirmation(live, tmp_path, monkeypatch):
