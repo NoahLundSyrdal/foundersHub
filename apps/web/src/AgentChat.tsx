@@ -119,7 +119,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
         {opened ? "Close chat" : needsReply ? "Open chat · waiting for you" : "Open chat"}
       </button>
       <div className="chat-thread" ref={thread} aria-live="polite">
-        {visible.length === 0 && !sendingShown && <p className="chat-empty">Ask about orders, something broken, rooms or air quality.</p>}
+        {visible.length === 0 && !sendingShown && <p className="chat-empty">Ask a question or tell me what you need help with.</p>}
         {visible.map((request) => (
           <ChatTurn key={request.id} request={request} stationName={stationName(request.station_id)} busy={busy} onApprove={onApprove} onReject={onReject} onRequote={onRequote} onOpenTicket={onOpenTicket} />
         ))}

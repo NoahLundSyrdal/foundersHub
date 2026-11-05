@@ -45,6 +45,6 @@ def router(conn, lock, rooms=None):
                     ModelResponse(parts=[TextPart((turn["reply"] or "No response recorded") + f"\n[Request {turn['id']}; current status: {turn['status']}]")])])
             task_id = agent.start_task(conn, body.board_id, config.GUEST.name, body.text.strip())
             conn.execute("INSERT INTO chat_turns VALUES(?,?,?,?)", (body.event_id, body.conversation_id, task_id, payload))
-            await agent.run(conn, task_id, body.text.strip(), chat_history=messages, rooms=rooms, event_id=body.event_id)
+            await agent.run(conn, task_id, body.text.strip(), chat_history=messages, rooms=rooms, event_id=body.event_id, conversation_id=body.conversation_id)
             return requests_api.response(conn, task_id)
     return routes

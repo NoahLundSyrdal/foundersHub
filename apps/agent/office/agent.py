@@ -35,6 +35,8 @@ People hand you tasks by voice. Your job is to make things happen with zero fric
   the system asks a human for approval when policy requires it.
 - Keep the conversation coherent using message history. Resolve references like "yes", "there" and quantities from that history.
 - Location is only input context. A cafe problem is about the cafe even when the source is the printer.
+- Before advising on a meeting location, read_environment_history for that location and read_sensors for current conditions. In this demo the stage button uses board kitchen; do not assume other rooms share its readings.
+- If earlier samples show poor meeting conditions, mention that history before proceeding. Label simulated evidence explicitly, distinguish past from current conditions, and never claim a meeting was booked without a confirmed booking result.
 - Record requests about missing furniture or supplies outside the approved catalogue with create_ticket; do not force them into a printer/kitchen catalogue.
 - Before purchasing, call prepare_purchase_request with the concrete need and appropriate configured location. This validates scope and prices, not approval.
 - Ask a question only if you truly cannot act.
@@ -180,7 +182,7 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
     _update(conn, task_id, status="running")
 
     try:
-        if config.MODEL == "mock" and prompt is not None:
+        if config.MODEL == "mock" and prompt is not None and chat_history is None:
             from office import environment_queries
             environment = environment_queries.answer(conn, task_id, prompt)
             if environment is not None:
@@ -190,9 +192,9 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
         if config.MODEL != "mock" and prompt is not None:
             # Live mode: Claude converses with read tools and submits validated requests (office/conversation.py).
             from office import conversation
-            return await conversation.run(conn, task_id, prompt, rooms=rooms, event_id=event_id,
-                                          conversation_id=conversation_id, chat_history=chat_history)
-        if chat_history is not None:  # mock-mode dashboard chat turn (office/chat_api.py)
+            return await conversation.run(conn, task_id, prompt, rooms=rooms,
+                                          event_id=event_id, conversation_id=conversation_id, chat_history=chat_history)
+        if chat_history is not None:
             prepared = {"interpretation": {"intent": "conversation", "item_id": None, "quantity": 1,
                 "summary": prompt[:500], "question": None, "assessment": {"severity": "routine", "confidence": 1,
                 "requires_confirmation": False, "reason": "Conversation; any purchasing requires a separately validated quote"}},
