@@ -7,7 +7,7 @@ import { createOfficeScene } from "./officeScene";
 import { createTwinDevice, loadTwinDevices, saveTwinDevices, type TwinDevice } from "./twinDevices";
 import { createDeviceMesh, disposeDeviceMeshes, isOfficeFloor } from "./twinDeviceScene";
 import { isLow, reading, stationRequests, TwinInspector, type TwinSelection } from "./TwinInspector";
-import { roomAt, thingById, thingForRequest, thingsAt, type StationId } from "./twinThings";
+import { reportMarkers, roomAt, thingById, thingForRequest, thingsAt, type StationId } from "./twinThings";
 import "./office-twin.css";
 
 type View = "perspective" | "plan";
@@ -56,6 +56,8 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
   const [update, setUpdate] = useState<string | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
+  const roomMarkers = reportMarkers(requests);
+  const reportElements = useRef<Record<string, HTMLButtonElement | null>>({});
   const markerElements = useRef<Partial<Record<StationId, HTMLButtonElement | null>>>({});
   const deviceElements = useRef<Record<string, HTMLButtonElement | null>>({});
   const deviceState = useRef({ devices, selection, placing });
@@ -92,6 +94,15 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
     host.prepend(renderer.domElement);
     const scene = new THREE.Scene();
     const { group, hotspots, things } = createOfficeScene();
+    const reportAnchors = new Map<string, THREE.Vector3>();
+    for (const [id, meshes] of things) {
+      if (!meshes.length) continue;
+      const bounds = new THREE.Box3();
+      for (const mesh of meshes) bounds.expandByObject(mesh);
+      const anchor = bounds.getCenter(new THREE.Vector3());
+      anchor.y = bounds.max.y + 0.3;
+      reportAnchors.set(id, anchor);
+    }
     scene.add(group);
     const deviceGroup = new THREE.Group();
     scene.add(deviceGroup);
@@ -335,6 +346,13 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
         projected.project(camera);
         place(element);
       }
+      for (const [id, element] of Object.entries(reportElements.current)) {
+        const anchor = reportAnchors.get(id);
+        if (!element || !anchor) continue;
+        projected.copy(anchor);
+        projected.project(camera);
+        place(element);
+      }
       for (const device of deviceState.current.devices) {
         const element = deviceElements.current[device.id];
         if (!element) continue;
@@ -457,6 +475,19 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
                   </span>
                 </button>
               );
+            })}
+            {roomMarkers.map(({ thing, reports }) => {
+              const status = mostUrgent(reports)!.status;
+              return <button key={`report-${thing.id}`}
+                ref={(element) => { reportElements.current[thing.id] = element; }}
+                className={`twin-pin ${selection?.type === "thing" && selection.id === thing.id ? "selected" : ""}`}
+                aria-pressed={selection?.type === "thing" && selection.id === thing.id}
+                aria-label={`${thing.name}: ${reports.length} reports, ${statusLabels[status]}`}
+                title={reports.map((r) => r.summary || r.original_text).join("\n")}
+                onClick={() => select({ type: "thing", id: thing.id })}>
+                <i className={`dot dot-${status}`} aria-hidden="true" />
+                <span>{thing.name}<small>{reports.length} {reports.length === 1 ? "report" : "reports"} · {statusLabels[status]}</small></span>
+              </button>;
             })}
             {devices.filter((device) => device.kind === "level").map((device) => {
               const selected = selection?.type === "device" && selection.id === device.id;
