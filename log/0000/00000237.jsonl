@@ -1,0 +1,1 @@
+{"id":"mw3t8kko3f274cda","member":"noah-lund-syrdal-b43119","lamport":333,"ts":1793899152175,"type":"upsert","kind":"task","key":"three-minute-demo-rehearsal","data":{"title":"Rehearse the three-minute coffee, approval and facility demo","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["demo verification","local app UI/API"]},"source":"explicit"}
