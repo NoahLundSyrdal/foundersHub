@@ -1,5 +1,6 @@
 """Read-only physical telemetry available from every conversation location."""
 from datetime import datetime, timezone
+import json
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets import FunctionToolset
 from office import config, db
@@ -34,3 +35,24 @@ async def read_sensors(ctx: RunContext[Deps], board_id: str | None = None) -> li
         result.append({**row, "location": config.BOARDS[row["board_id"]].location,
                        "fresh": fresh, "simulation": False})
     return result
+
+
+@toolset.tool
+async def read_environment_history(ctx: RunContext[Deps], board_id: str | None = None) -> list[dict]:
+    """Read up to 24 environmental samples from the past seven days for one board.
+    Defaults to the conversation board. The demo stage button is mapped to kitchen.
+    Includes explicitly labelled simulation fixtures. These are historical evidence,
+    never current conditions; simulations do not establish real-world conditions.
+    """
+    board_id = board_id or ctx.deps.board.id
+    if board_id not in config.BOARDS:
+        raise ValueError("Unknown board")
+    if not ctx.deps.db.execute("SELECT 1 FROM sqlite_master WHERE name='facility_events'").fetchone():
+        return []
+    rows = db.rows(ctx.deps.db, "SELECT body FROM facility_events "
+        "WHERE json_extract(body, '$.board_id')=? "
+        "AND json_extract(body, '$.metric') IN ('co2_ppm','temperature_c','humidity_pct') "
+        "AND julianday(json_extract(body, '$.timestamp')) BETWEEN julianday('now', '-7 days') AND julianday('now') "
+        "ORDER BY julianday(json_extract(body, '$.timestamp')) DESC, id LIMIT 24", board_id)
+    return [{**json.loads(row['body']), "location": config.BOARDS[board_id].location,
+             "historical": True} for row in rows]

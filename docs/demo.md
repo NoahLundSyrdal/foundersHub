@@ -65,3 +65,23 @@ This posts a canonical kitchen transcript event and prints the response and devi
 ## First live-purchase milestone after the foundation
 
 Choose one supplier and one low-cost product. Add authenticated approval, exact price/delivery confirmation, an execution identifier, provider confirmation, and reconciliation before enabling checkout. A live supplier adapter should be a separate explicitly authorized change. Until that exists, keep the confirmation labelled simulated.
+
+## Small environmental-history fixture
+
+Seed a chosen **local demo database** (use the same path as `AGENT_DATABASE_PATH`):
+
+```sh
+uv run --project apps/agent python -m office.demo_history --database /private/tmp/foundershub-main-preview.sqlite
+```
+
+This adds exactly two completed, explicitly simulated stage checks from four and two
+hours before the first seed, with CO₂ / temperature / humidity of
+1650 ppm / 27.2 °C / 64% and 1820 ppm / 28.1 °C / 67%. Re-running does not duplicate
+or refresh the fixtures. The stage button uses board `kitchen`; these samples do
+not describe other rooms. They never enter physical telemetry or execute actions.
+The stage inspector shows the latest simulated, stale values; History shows both checks.
+
+Ask **“Can you book a meeting here at the stage?”** The read-only history tool makes
+both snapshots available to the live agent for seven days. Mock mode has a labelled,
+scripted response warning about the two simulated high-CO₂ checks. Neither mode may
+claim these are current conditions or that a booking occurred without a provider result.

@@ -1,5 +1,5 @@
 import type { OfficeRequest, Station } from "@office/contracts";
-import { isMerged, isTicket, money, requestTitle, stamp } from "./format";
+import { isMerged, money, requestTitle, stamp } from "./format";
 
 const dayLabel = (value: string) => {
   const date = new Date(value);
@@ -25,8 +25,7 @@ export function HistoryView({
   disabled: boolean;
   onOpen: (id: string) => void;
 }) {
-  const entries = requests
-    .filter(isTicket)
+  const entries = [...requests]
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const days = new Map<string, OfficeRequest[]>();
   for (const entry of entries) {

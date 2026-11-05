@@ -15,10 +15,22 @@ def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     returns = [p for p in parts if isinstance(p, ToolReturnPart)]
     prompts = [p.content for p in parts if isinstance(p, UserPromptPart) and isinstance(p.content, str)]
     if returns and not prompts:
+        history = next((p.content for p in returns if p.tool_name == "read_environment_history"), None)
+        if isinstance(history, list):
+            poor = [r for r in history if r.get("simulation") and r.get("metric") == "co2_ppm" and r.get("value", 0) >= 1500]
+            if len({r["timestamp"] for r in poor}) >= 2:
+                return ModelResponse(parts=[TextPart("Mock demo: two earlier simulated checks showed high CO₂ here. Check current conditions before meeting; no booking made.")])
+            return ModelResponse(parts=[TextPart("Mock demo: insufficient simulated environmental history for this location. No meeting booked.")])
         return ModelResponse(parts=[TextPart(str(returns[-1].content))])
 
     text = " ".join(prompts).lower()
     tools = {t.name for t in info.function_tools}
+    if "read_environment_history" in tools and re.search(r"\bmeeting\b", text):
+        if re.search(r"\bstage\b|\bkitchen\b", text):
+            board_id = "kitchen"
+        else:
+            board_id = next((b for b in config.BOARDS if re.search(rf"\b{re.escape(b)}\b", text)), None)
+        return ModelResponse(parts=[ToolCallPart("read_environment_history", {"board_id": board_id})])
     if "office_status" in tools and re.search(r"\b(status|update)\b", text):
         return ModelResponse(parts=[ToolCallPart("office_status", {})])
     if "create_ticket" in tools and re.search(r"broken|leak|not working|jammed|stuck", text):
