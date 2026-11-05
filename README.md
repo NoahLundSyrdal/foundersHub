@@ -56,6 +56,7 @@ apps/device/              Python USB bridge, simulator, device tests
 packages/contracts/       Shared TypeScript schemas and generated JSON Schema
 config/stations.json      Station locations, equipment, teams, catalogue scope
 config/office.json        Office preferences and spending policy
+config/brain/             Offline copy of the Notion company brain: procedures, approval routing
 fixtures/products.json    Explicitly simulated catalogue
 ```
 
@@ -108,6 +109,7 @@ Automatic extraction uses your installed agent's login and subscription or API u
 | `npm test` | Backend tests and Python device tests |
 | `npm run contracts:export` | Regenerate device JSON Schema from shared contracts |
 | `npm run device:simulate` | Submit a sample kitchen request to a running API |
+| `npm run connect -- notion\|sync` | One-time Notion sign-in; re-sync the company brain |
 
 Runtime database files live in ignored `.data/` by default. Stop the backend before removing its database to reset local demo data. Never commit `.env`, recordings, credentials, or runtime databases.
 
@@ -122,6 +124,25 @@ The important technical boundaries are validated decisions, exact proposal appro
 The application ranks approved fixture offers by landed price, quality and delivery; those inputs remain simulated. Real purchasing needs a supplier adapter, confirmed delivery terms, authenticated approval, credentials and reconciliation of uncertain execution results. Maintenance tickets are local records; service proposals do not book real contractors.
 
 See [architecture and API contracts](docs/architecture.md), [demo steps](docs/demo.md), and [hardware setup](docs/hardware.md). MCP can expose the same backend capabilities later; it is not required to connect the first three apps.
+
+## Company brain on Notion
+
+Notion holds the office's procedures and an **approval routing** table: which person approves which kind of approval. Application code reads the table and attaches the approver to every proposal; the model never chooses who approves. The dashboard shows it above the approve buttons ("For Leo · Above the office cap of 1000 NOK per order").
+
+| Approval type | When (decided by the server) |
+| --- | --- |
+| `purchase` | A simulated order that office policy sends to a human |
+| `purchase_over_cap` | Any order above `max_order_nok`. It is no longer refused: if no offer fits under the cap, the best one goes to this approver, and it always needs a human |
+| `contractor` | A service visit (plumbing, ventilation, printer repair) |
+| `default` | Fallback when a type has no row |
+
+Offline and in mock mode the brain is the checked-in copy in `config/brain/`. With a live model, connect Notion once and point it at the brain's root page:
+
+```sh
+npm run connect -- notion   # browser sign-in to Notion's hosted MCP; token in ignored .data/oauth/
+```
+
+Set `NOTION_BRAIN_PAGE_ID` to a page whose child pages hold the procedures and a table with `Approval type | Approver` (same shape as `config/brain/approval-routing.md`, with at least `purchase` and `purchase_over_cap`). `npm run connect -- sync` or `POST /api/brain/sync` re-reads it into `.data/brain/`; a sync without a valid routing table is refused and the previous snapshot stays. `GET /api/brain` shows what is in use. The agent also gets Notion's read-only tools; if Notion is down, a run continues without them. It keeps an office notebook across tasks (Pydantic AI Harness `Memory`, `.data/memory.sqlite`, live mode only).
 
 ## Food on Oda
 

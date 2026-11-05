@@ -34,6 +34,7 @@ def request_view(conn, task_id: str) -> dict:
         "simulation": not bool(task.get("grocery")), "assigned_to": ticket["team"] if ticket else None,
         "created_at": task["created_at"], "updated_at": task["updated_at"],
         "assessment": task.get("assessment"), "approval_required": task.get("approval_required", True),
+        "approval": task.get("approval"),  # {type, approver, reason} from the company brain's routing table
         "research": task.get("research", []),
         "grocery": task.get("grocery"),
     }

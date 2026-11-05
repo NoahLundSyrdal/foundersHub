@@ -28,14 +28,19 @@ def rank_offers(station, item_id, quantity, offers, rules, now):
         total = offer_total(offer, quantity)
         reason = ("Unavailable" if not offer["available"] else "Quote expired" if epoch(offer["expires_at"]) <= now
                   else "Below minimum quality" if offer["quality_score"] < rules["minimum_quality"]
-                  else "Delivery exceeds policy" if offer["delivery_hours"] > rules["max_delivery_hours"]
-                  else "Total including shipping exceeds spending limit" if minor(total) > minor(rules["max_order_nok"]) else None)
+                  else "Delivery exceeds policy" if offer["delivery_hours"] > rules["max_delivery_hours"] else None)
         if reason:
             rejected.append({"offer_id": offer["id"], "reason": reason})
         else:
             eligible.append((offer, total))
     if not eligible:
         return None
+    # Above the office cap is not a refusal: if nothing fits under it, the best offer goes to a human for approval
+    # (needs_approval always requires one above the cap). Under-cap offers win whenever there is one.
+    within = [(o, t) for o, t in eligible if minor(t) <= minor(rules["max_order_nok"])]
+    if within:
+        rejected += [{"offer_id": o["id"], "reason": "Total including shipping exceeds spending limit"} for o, t in eligible if (o, t) not in within]
+        eligible = within
     minimum = min(total for _, total in eligible)
     fastest = min(o["delivery_hours"] for o, _ in eligible)
     weight_sum = sum(rules["ranking_weights"].values())
@@ -50,7 +55,8 @@ def rank_offers(station, item_id, quantity, offers, rules, now):
     best = alternatives[0]
     o = best["offer"]
     return {"weights": weights, "selected_offer_id": o["id"], "alternatives": alternatives, "rejected": rejected,
-            "reason": f"Highest policy score {best['score']:g}/100: NOK {best['total_nok']:g} including shipping; {o['delivery_hours']}h fixture delivery; quality {o['quality_score']:g}/100 ({o['quality_basis']}). All compared offers are simulated."}
+            "reason": f"Highest policy score {best['score']:g}/100: NOK {best['total_nok']:g} including shipping; {o['delivery_hours']}h fixture delivery; quality {o['quality_score']:g}/100 ({o['quality_basis']}). All compared offers are simulated."
+                      + (f" No offer fits the NOK {rules['max_order_nok']:g} office cap, so this needs a human's approval." if minor(best["total_nok"]) > minor(rules["max_order_nok"]) else "")}
 
 
 def plan_purchase(station, item_id, quantity, requests, products, templates, rules, now):
@@ -64,7 +70,7 @@ def plan_purchase(station, item_id, quantity, requests, products, templates, rul
     offers = [o for o in fixture_offers(templates, rules, now) if o["fulfillment_kind"] == product.get("fulfillment_kind", "goods")]
     sourcing = rank_offers(station, item_id, quantity, offers, rules, now)
     if not sourcing:
-        return {"kind": "clarification", "question": f"No eligible offer meets the NOK {rules['max_order_nok']:g} spending limit, quality, availability and delivery rules. Clarify the quantity or ask an administrator to review sourcing."}
+        return {"kind": "clarification", "question": "No eligible offer meets the quality, availability and delivery rules. Clarify the quantity or ask an administrator to review sourcing."}
     selected = sourcing["alternatives"][0]
     offer = selected["offer"]
     return {"kind": "proposal", "proposal": {
@@ -94,5 +100,6 @@ def needs_approval(request, rules):
     assessment = request.get("assessment") or missing_assessment()
     proposal = request.get("proposal") or {}
     return (rules["require_approval"] or assessment["severity"] == "critical" or assessment["requires_confirmation"] or
+            proposal.get("total_nok", float("inf")) > rules["max_order_nok"] or
             assessment["confidence"] < rules["auto_approval_min_confidence"] or proposal.get("total_nok", float("inf")) > rules["auto_approval_max_nok"] or
             (proposal.get("fulfillment_kind") == "service" and rules["service_requires_approval"]))

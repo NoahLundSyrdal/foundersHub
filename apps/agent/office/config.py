@@ -11,6 +11,9 @@ ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(ROOT / ".env")
 
 MODEL = os.getenv("OFFICE_MODEL", "mock")  # "mock" = offline scripted model; e.g. "anthropic:claude-sonnet-5-5"
+LIVE = MODEL != "mock"  # mock mode is fully offline: no Notion, local brain copy only
+DATA = ROOT / ".data"  # gitignored: runtime DB, memory, OAuth tokens, Notion snapshot
+MEMORY_PATH = os.getenv("MEMORY_PATH", str(DATA / "memory.sqlite"))
 DATABASE_PATH = os.getenv("AGENT_DATABASE_PATH", str(ROOT / ".data" / "agent.sqlite"))
 if DATABASE_PATH != ":memory:":
     DATABASE_PATH = str(ROOT / DATABASE_PATH)

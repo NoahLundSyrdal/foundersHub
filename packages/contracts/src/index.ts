@@ -147,6 +147,8 @@ export type OfficeRequest = {
   research?: Research[];
   assessment?: Assessment;
   approval_required?: boolean;
+  /** Who must approve, from the company brain's approval routing (Notion). Set by the server, never the model. */
+  approval?: { type: "purchase" | "purchase_over_cap" | "contractor" | string; approver: string; reason: string } | null;
   grocery?: GroceryWorkflow | null;
 };
 export type OdaFoodProposal = {
