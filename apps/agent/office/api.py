@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import facility_api, oda_food, oda_api, work_api
-from office import alert_rules, order_confirmations, whatsapp_delivery
+from office import alert_rules, order_confirmations, whatsapp_delivery, development, development_api
 from office.facility_rules import FacilityReading
 
 
@@ -112,6 +112,8 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.state.oda_food = groceries
     app.state.work = work
     app.state.order_confirmations = approvals
+    app.state.development = development.Development(conn)
+    app.include_router(development_api.router(app.state.development))
     app.include_router(requests_api.router(conn))
     app.include_router(facility_api.router(facilities))
     app.include_router(oda_api.router(groceries))
