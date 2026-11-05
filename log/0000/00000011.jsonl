@@ -1,0 +1,1 @@
+{"id":"mw3n6qzkaf0dd6b2","member":"jrg-bergh-c202cb","lamport":50,"ts":1793888989472,"type":"upsert","kind":"task","key":"usecase-doc","data":{"status":"done","note":"docs/usecases.md describes the CO2 checker and order by voice. Gaps: CO2 sensor not in kit, orders do not create tickets, air-quality-stt not merged."},"source":"explicit"}
