@@ -21,3 +21,29 @@ def test_general_chat_reads_physical_sources_with_freshness():
     assert asyncio.run(sensors.read_sensors(ctx, "bathroom")) == []
     with pytest.raises(ValueError):
         asyncio.run(sensors.read_sensors(ctx, "unknown"))
+
+
+def test_bridge_samples_update_dashboard_and_agent_from_same_source():
+    from fastapi.testclient import TestClient
+    from office.api import create_app
+    from office import bus
+    app = create_app(":memory:")
+    conn = app.state.facilities.conn
+    events = []
+    unsubscribe = bus.add_listener(lambda name, data: events.append(name), source=conn)
+    try:
+        with TestClient(app) as client:
+            for kind, value in [("temperature", 22.5), ("humidity", 45.0), ("co2_ppm", 650.0)]:
+                response = client.post("/api/sensor", json={"board_id": "kitchen", "kind": kind, "value": value})
+                assert response.status_code == 200, response.text
+            snapshot = client.get("/api/facility").json()
+            expected = {"temperature_c": 22.5, "humidity_pct": 45.0, "co2_ppm": 650.0}
+            dashboard = {r["metric"]: r["value"] for r in snapshot["readings"] if r["board_id"] == "kitchen"}
+            assert dashboard == expected
+            ctx = SimpleNamespace(deps=SimpleNamespace(db=conn, board=config.BOARDS["office"]))
+            readings = asyncio.run(sensors.read_sensors(ctx))
+            assert {r["kind"]: r["value"] for r in readings} == expected
+            assert all(r["fresh"] for r in readings)
+            assert events.count("facility.updated") >= 3
+    finally:
+        unsubscribe()
