@@ -115,7 +115,14 @@ def _close_failed_run(conn, task_id: str, reply: str) -> dict:
 
 def recover_interrupted(conn) -> None:
     """Runs don't survive a restart, so close any left running instead of showing them as live forever."""
+    registered_checks = db.row(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='facility_device_inputs'")
     for task in db.rows(conn, "SELECT id FROM tasks WHERE status = 'running'"):
+        if registered_checks and db.row(conn, """SELECT 1 FROM device_events d
+            JOIN facility_device_inputs f ON f.id=d.event_id
+            WHERE d.task_id=? AND json_extract(f.body,'$.type')='stock_low'""", task["id"]):
+            # The facility handler resumes a persisted check without a model and
+            # stops uncertain supplier attempts for explicit reconciliation.
+            continue
         _close_failed_run(conn, task["id"], "This was interrupted by a restart. Please send it again.")
 
 
@@ -194,6 +201,12 @@ async def decide(conn, task_id: str, approve: bool, proposal_fingerprint: str | 
         from office.oda_food import service
         try:
             return await service(conn).decide(task_id, approve, proposal_fingerprint)
+        except procurement_workflow.ProcurementConflict as error:
+            raise StaleApproval(str(error)) from error
+    if prepared and prepared.get("source") == "facility-rule":
+        from office.facility_api import decide_replenishment
+        try:
+            return await decide_replenishment(conn, task_id, approve, proposal_fingerprint)
         except procurement_workflow.ProcurementConflict as error:
             raise StaleApproval(str(error)) from error
     t = db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)
