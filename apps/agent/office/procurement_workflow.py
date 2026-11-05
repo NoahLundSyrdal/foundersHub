@@ -150,6 +150,15 @@ def approval_metadata(value, person_name):
             "proposal_fingerprint": proposal_fingerprint(p), "assessment": value["assessment"]}
 
 
+def release_quote(conn, task_id):
+    """Nothing was attempted, so drop the quote: it must not block the item or look like an order."""
+    value = get_context(conn, task_id)
+    if value and value.get("proposal"):
+        value["proposal"] = None
+        value.pop("approved_fingerprint", None)
+        store_context(conn, task_id, value)
+
+
 def requote_task(conn, task_id, fingerprint):
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
     value = get_context(conn, task_id)

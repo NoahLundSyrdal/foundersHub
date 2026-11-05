@@ -83,6 +83,24 @@ def _update(conn, task_id: str, **fields) -> dict:
     return task
 
 
+def _close_failed_run(conn, task_id: str, reply: str) -> dict:
+    """Record a run that stopped early. Only a real execution attempt can make an order uncertain."""
+    procurement_workflow.ensure_schema(conn)
+    attempt = db.row(conn, "SELECT state, reference FROM procurement_attempts WHERE task_id = ?", task_id)
+    if attempt and attempt["state"] == "confirmed":
+        reply = f"Ordered (simulated), ref {attempt['reference']}."
+        return _update(conn, task_id, status="done", reply=reply, pending="[]")
+    if not attempt:
+        procurement_workflow.release_quote(conn, task_id)
+    return _update(conn, task_id, status="failed", reply=reply, pending="[]")
+
+
+def recover_interrupted(conn) -> None:
+    """Runs don't survive a restart, so close any left running instead of showing them as live forever."""
+    for task in db.rows(conn, "SELECT id FROM tasks WHERE status = 'running'"):
+        _close_failed_run(conn, task["id"], "This was interrupted by a restart. Please send it again.")
+
+
 def start_task(conn, board_id: str, person_name: str, text: str) -> str:
     """Create a new input task; explicit transcript endpoints continue clarification."""
     task_id = db.new_id()
@@ -129,11 +147,10 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
             usage_limits=UsageLimits(request_limit=6, tool_calls_limit=10, total_tokens_limit=16000),
         )
     except Exception as e:  # demo: surface any failure on the board instead of crashing the request
-        reply = f"Sorry, something went wrong: {type(e).__name__}"
-        bus.publish("board.say", {"board_id": board.id, "text": reply})
-        return _update(conn, task_id, status="failed", reply=reply) | {
-            "command": db.set_command(conn, board.id, reply, "red")
-        }
+        task = _close_failed_run(conn, task_id, f"Sorry, something went wrong: {type(e).__name__}")
+        bus.publish("board.say", {"board_id": board.id, "text": task["reply"]})
+        color = "green" if task["status"] == "done" else "red"
+        return task | {"command": db.set_command(conn, board.id, task["reply"], color)}
 
     out = result.output
     if isinstance(out, DeferredToolRequests):
