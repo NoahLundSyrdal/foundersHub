@@ -52,7 +52,7 @@ office_agent = Agent(
 
 
 @office_agent.instructions
-def context(ctx: RunContext[Deps]) -> str:
+async def context(ctx: RunContext[Deps]) -> str:
     b, p = ctx.deps.board, ctx.deps.person
     others = ", ".join(f"{x.id} ({x.location}: {', '.join(sorted(x.modules))})" for x in config.BOARDS.values())
     return (
@@ -111,6 +111,9 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
             return _update(conn, task_id, status="done", reply=reply) | {"command": db.set_command(conn, board.id, reply, "amber")}
         if prompt is not None and decision["assessment"]["severity"] == "critical" and not decision["item_id"]:
             reply = "Critical safety report requires immediate human review; no automatic order was placed."
+            # A local record for the responsible team, so the report can be followed and closed.
+            conn.execute("INSERT INTO tickets VALUES (?, ?, ?, ?, ?, 'open', ?)",
+                         (db.new_id(), task_id, board.id, decision["summary"], board.responsible_team, db.now()))
             return _update(conn, task_id, status="done", reply=reply) | {"command": db.set_command(conn, board.id, reply, "red")}
         if prompt is not None and decision["item_id"]:
             prompt += f"\nValidated need: {decision['quantity']} {decision['item_id'].replace('-', ' ')}. Use only these exact order arguments."

@@ -1,0 +1,230 @@
+/* The chat sits on the agent panel's colour field, so it uses white and ink only. */
+.chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.chat-thread {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(21 19 15 / 0.3) transparent;
+}
+.chat-thread > :first-child {
+  margin-top: auto;
+}
+.chat-empty {
+  margin-bottom: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.chat-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  animation: settle 240ms var(--ease-out);
+}
+.chat-meta {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+.chat-bubble {
+  width: fit-content;
+  max-width: 92%;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  border-radius: 14px;
+}
+.chat-you {
+  align-self: flex-end;
+  color: var(--paper);
+  background: var(--ink);
+  border-bottom-right-radius: 4px;
+}
+.chat-agent {
+  background: var(--paper);
+  border-bottom-left-radius: 4px;
+}
+.chat-agent small,
+.chat-card small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.chat-sensor {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.chat-typing {
+  display: flex;
+  gap: 4px;
+  padding: 12px;
+}
+.chat-typing i {
+  width: 6px;
+  height: 6px;
+  background: var(--ink);
+  border-radius: 50%;
+  animation: nudge 1.2s ease-in-out infinite;
+}
+.chat-typing i:nth-child(2) {
+  animation-delay: 150ms;
+}
+.chat-typing i:nth-child(3) {
+  animation-delay: 300ms;
+}
+.chat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  font-size: 13px;
+  background: var(--paper);
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+}
+.chat-card strong {
+  font-size: 15px;
+}
+.chat-card b {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.chat-card .proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.chat-card .proposal-actions p {
+  flex-basis: 100%;
+  margin: 0;
+  font-weight: 600;
+}
+.chat-card .proposal-actions button {
+  flex: 1;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.chat-warning {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.chat-toggle {
+  display: none;
+}
+.chat-link {
+  align-self: flex-start;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+}
+.chat-error {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.chat-form {
+  flex: none;
+  margin: 0;
+}
+.chat-where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.chat-where button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: none;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  transition: background 140ms ease, color 140ms ease;
+}
+.chat-where button[aria-pressed="true"] {
+  color: var(--paper);
+  background: var(--ink);
+}
+.chat-replying {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.chat-replying button {
+  margin-left: 8px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+}
+.chat-form textarea {
+  min-height: 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  resize: none;
+  border-color: transparent;
+}
+.chat-form textarea:focus-visible {
+  border-color: var(--ink);
+  outline: 0;
+}
+.chat-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+.chat-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.chat-actions .secondary {
+  background: transparent;
+}
+.chat-actions .primary:disabled {
+  opacity: 0.55;
+}
+@media (max-width: 960px) {
+  .chat-thread {
+    max-height: 42vh;
+  }
+  .chat-toggle {
+    display: block;
+    flex: none;
+    min-height: 40px;
+    font-size: 14px;
+    background: transparent;
+  }
+  .chat:not(.chat-open) > :not(.chat-toggle) {
+    display: none;
+  }
+}

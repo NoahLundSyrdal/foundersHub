@@ -1,127 +1,394 @@
-/* The twin is self-contained so it can live beside either dashboard layout. */
-.office-twin { --twin-ink:#e9edf1; --twin-muted:#92a2b4; --twin-line:#2d3b4b; color:var(--twin-ink); background:#142031; border:1px solid var(--twin-line); border-radius:16px; overflow:hidden; margin:0 0 30px; box-shadow:0 16px 45px #00000016; }
-.twin-toolbar { display:flex; align-items:center; justify-content:space-between; padding:17px 20px; gap:15px; border-bottom:1px solid var(--twin-line); background:#172335; }
-.twin-floor { display:flex; align-items:center; gap:12px; font-size:11px; color:#aebcce; }
-.twin-floor > svg { width:28px; height:28px; color:#e8b18e; }
-.twin-floor strong { color:#edf1f6; font-weight:500; }
-.twin-floor span { margin:0 8px; color:#5d6d82; }
-.twin-floor small { display:block; font-size:7px; letter-spacing:1.6px; color:#8498b0; margin-top:5px; }
-.twin-view-controls { display:flex; gap:3px; background:#0e1827; padding:4px; border:1px solid #2c3b50; border-radius:8px; margin-left:auto; }
-.twin-view-controls button { background:transparent; border:0; border-radius:5px; padding:7px 11px; color:#8c9db4; display:flex; gap:7px; align-items:center; font-size:10px; }
-.twin-view-controls button svg { width:14px; height:14px; }
-.twin-view-controls button.active { background:#334255; color:#fff0e6; box-shadow:0 1px 4px #0002; }
-.twin-icon-button { display:grid; place-items:center; padding:7px; border:1px solid #344255; border-radius:6px; background:transparent; color:#a5b7ce; }
-.twin-icon-button:hover { background:#304258; }
-.twin-body { display:grid; grid-template-columns:minmax(0,1fr) 280px; }
-.twin-map-wrap { position:relative; min-width:0; background:radial-gradient(ellipse at 42% 35%,#eff0e9 0%,#dde2dc 55%,#cdd6d0 100%); overflow:hidden; color:#35463e; }
-.twin-canvas { height:540px; position:relative; isolation:isolate; }
-.twin-canvas > canvas { width:100%; height:100%; display:block; cursor:grab; touch-action:none; }
-.twin-canvas > canvas:active { cursor:grabbing; }
-.twin-map-caption { position:absolute; top:23px; left:24px; z-index:2; pointer-events:none; font-size:7px; letter-spacing:1.8px; font-weight:700; color:#52675c; }
-.twin-map-dot { display:inline-block; width:5px; height:5px; border-radius:50%; background:#52806c; margin-right:6px; }
-.twin-map-caption small { display:block; color:#728078; font-size:8px; letter-spacing:0; font-weight:400; margin-top:7px; }
-.twin-hotspots { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
-.twin-hotspot { position:absolute; top:0; left:0; display:flex; align-items:center; gap:8px; border:1px solid #b0c0b3; background:#f8faf3f2; border-radius:9px; padding:7px 10px 7px 7px; box-shadow:0 5px 16px #253d3220; color:#334c3d; pointer-events:auto; visibility:hidden; white-space:nowrap; text-align:left; transition:background .15s,border-color .15s; }
-.twin-hotspot:hover { background:#fff; border-color:#d29364; z-index:5; }
-.twin-hotspot.selected { border-color:#c17f50; background:#fff8ed; box-shadow:0 0 0 3px #d99c6740,0 5px 18px #253d3220; z-index:3; }
-.hotspot-pin { display:grid; place-items:center; width:29px; height:29px; background:#e5eee4; color:#5c856e; border-radius:6px; }
-.hotspot-pin svg { width:17px; height:17px; }
-.mood-pending .hotspot-pin { color:#b97725; background:#f6e7cc; }
-.mood-attention .hotspot-pin { color:#b45f4f; background:#f5e1d9; }
-.mood-done .hotspot-pin { color:#458775; background:#deeee5; }
-.hotspot-name { font-size:10px; font-weight:650; }
-.hotspot-name small { display:block; font-size:7px; font-weight:400; color:#778379; margin-top:4px; }
-.hotspot-tail { position:absolute; width:1px; height:18px; background:#8b9b8c; bottom:-19px; left:50%; }
-.hotspot-tail:after { content:""; position:absolute; width:5px; height:5px; left:-2px; bottom:0; background:#5e8971; border:2px solid #f8faf3; border-radius:50%; box-sizing:content-box; }
-.twin-map-bottom { position:absolute; bottom:44px; left:23px; right:20px; display:flex; align-items:center; gap:10px; pointer-events:none; }
-.twin-compass { font-size:8px; height:32px; width:23px; display:flex; flex-direction:column; align-items:center; gap:1px; color:#64786c; }
-.twin-compass i { font-style:normal; font-size:20px; line-height:19px; transform:rotate(-30deg); }
-.twin-orbit-hint { font-size:8px; color:#6d7d72; background:#e5eae180; padding:5px 7px; border-radius:4px; }
-.twin-orbit-hint b { font-weight:400; margin:0 5px; }
-.twin-zoom { display:flex; align-items:center; pointer-events:auto; margin-left:auto; box-shadow:0 2px 8px #23362b12; border-radius:7px; border:1px solid #b7c3b7; background:#f1f5edee; }
-.twin-zoom button { width:30px; height:30px; border:0; background:transparent; color:#526b59; font-size:17px; display:grid; place-items:center; }
-.twin-zoom button + button { border-left:1px solid #d2dbce; }
-.twin-zoom button:hover { background:#dae4d5; }
-.twin-zoom svg { width:12px; height:12px; }
-.twin-map-legend { display:flex; justify-content:center; gap:17px; position:absolute; left:0; bottom:0; width:100%; min-height:32px; align-items:center; border-top:1px solid #b8c5b755; background:#e8ede3af; color:#62776a; font-size:7px; }
-.twin-map-legend span { display:flex; align-items:center; gap:5px; }
-.twin-map-legend i { width:5px; height:5px; border-radius:50%; }
-.legend-quiet { background:#6c9c7b; }.legend-pending { background:#d29b48; }.legend-attention { background:#c77863; }
-.twin-inspector { padding:22px 22px 17px; background:#172435; border-left:1px solid var(--twin-line); }
-.twin-inspector-top { display:flex; align-items:center; justify-content:space-between; font-size:7px; letter-spacing:1.2px; color:#8798ac; }
-.twin-sync { display:flex; align-items:center; gap:5px; font-size:8px; letter-spacing:0; color:#9bbfac; }
-.twin-sync i { width:5px; height:5px; border-radius:50%; background:#89bca6; }
-.twin-sync.offline { color:#dbac83; }.twin-sync.offline i { background:#d7a06f; }
-.twin-station-tabs { display:flex; gap:7px; margin:23px 0 22px; }
-.twin-station-tabs button { width:39px; height:37px; display:grid; place-items:center; background:#1f2e40; color:#8c9fb6; border:1px solid #344256; border-radius:8px; }
-.twin-station-tabs button.selected { color:#ffbd90; border-color:#9b7158; background:#3a302b; }
-.twin-station-tabs button:hover { border-color:#e6a476; }
-.twin-zone { font-size:7px; color:#9aabbe; letter-spacing:1.5px; margin-bottom:8px; }
-.twin-inspector h2 { font-size:25px; letter-spacing:-1px; color:#f3f3ed; margin:0; font-weight:650; }
-.twin-inspector h2 span { color:#ffae7b; }
-.twin-description { font-size:10px; line-height:1.75; color:#93a4b8; margin:11px 0 20px; }
-.twin-station-state { display:flex; align-items:center; gap:8px; padding:12px 0; border-top:1px solid #314052; border-bottom:1px solid #314052; font-size:9px; }
-.twin-station-state strong { font-weight:500; color:#ced8e2; }.twin-station-state > span:last-child { margin-left:auto; font-size:11px; color:#91a4b9; font-variant-numeric:tabular-nums; }
-.twin-state-dot { width:6px; height:6px; border-radius:50%; background:#80af98; }
-.twin-state-dot.mood-pending { background:#e5ad63; }.twin-state-dot.mood-attention { background:#e08e79; }
-.twin-facts { display:grid; gap:13px; margin:18px 0; }
-.twin-facts div { display:block; }.twin-facts dt { font-size:8px; color:#8498b1; margin-bottom:5px; }.twin-facts dd { font-size:9px; color:#c0cddd; margin:0; line-height:1.6; }
-.twin-location-note { display:flex; align-items:center; gap:6px; color:#7d91a8; font-size:7px; line-height:1.6; margin:0 0 18px; }.twin-location-note svg { flex-shrink:0; width:11px; height:11px; }
-.twin-linked-request { display:block; text-align:left; width:100%; padding:12px; border:1px solid #495261; border-radius:7px; color:#d5dce4; background:#223143; margin:0 0 13px; }
-.twin-linked-request > span { display:block; font-size:6px; color:#8fabc3; letter-spacing:1.2px; margin-bottom:7px; }
-.twin-linked-request strong { display:block; font-size:9px; line-height:1.5; font-weight:500; }
-.twin-linked-request small { display:flex; justify-content:space-between; margin-top:9px; font-size:8px; color:#e6b18a; }
-.twin-report { width:100%; display:flex; justify-content:space-between; padding:11px 12px; font-size:10px; }
-.twin-virtual-note { color:#7b91a7; text-align:center; font-size:7px; margin:11px 0 0; line-height:1.5; }
-.twin-demo { display:flex; align-items:center; gap:20px; padding:20px; border-top:1px solid var(--twin-line); background:#182637; }
-.twin-demo-intro { display:flex; align-items:center; gap:11px; flex:1; }
-.twin-demo-spark { color:#ffba8b; font-size:28px; font-weight:400; }
-.twin-demo-intro strong { color:#e3e8ef; font-size:10px; font-weight:500; }
-.twin-demo-intro p { color:#899fb8; font-size:8px; margin:6px 0 0; line-height:1.5; }
-.twin-scenarios { display:flex; gap:8px; }
-.twin-scenarios button { display:flex; align-items:center; gap:8px; padding:11px 12px; font-size:9px; color:#d8e1ed; border:1px solid #3c4d64; background:#223347; border-radius:7px; white-space:nowrap; }
-.twin-scenarios button:hover { border-color:#d09c75; background:#2a3d53; }.twin-scenarios button svg { width:14px; height:14px; color:#f3b78d; }
-.twin-scenarios button > span:last-child { color:#8b9eb7; margin-left:3px; }.scenario-sensor { font-size:22px; line-height:12px; color:#f3b78d; }
-.twin-boundary { padding:11px 20px; font-size:8px; color:#889cb5; background:#111d2c; line-height:1.6; }.twin-boundary > span { color:#b2a699; letter-spacing:1px; font-size:6px; margin-right:12px; }
-.twin-fallback { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px; text-align:center; }.twin-fallback svg { width:42px; height:42px; }.twin-fallback p { max-width:330px; font-size:12px; line-height:1.8; }
-.twin-expanded { position:fixed; inset:16px; z-index:100; margin:0; box-shadow:0 0 0 30px #08111ce8; display:flex; flex-direction:column; }.twin-expanded .twin-body { flex:1; min-height:0; }.twin-expanded .twin-canvas { height:100%; min-height:350px; }.twin-expanded .twin-inspector { overflow:auto; }
-.twin-nav-button { width:100%; border:0; background:transparent; font:inherit; text-align:left; margin-bottom:5px; cursor:pointer; }.twin-nav-button svg { width:18px; height:18px; color:#ffa36e; }.twin-nav-button:hover { background:#19283a; }
-.twin-page .content { max-width:1700px; padding:30px 32px; }.twin-page .page-heading { margin-bottom:25px; }.twin-page .page-heading h1 { margin:8px 0; }.twin-page .stats { margin-bottom:24px; }.twin-page .stats > div { padding:16px 22px; }.twin-page .stats strong { font-size:28px; }
-.request-layout { scroll-margin-top:20px; }
-@media(min-width:1700px) { .twin-canvas { height:640px; }.twin-body { grid-template-columns:minmax(0,1fr) 310px; }.twin-inspector { padding:26px; } }
-@media(max-width:1250px) { .twin-page .content { padding:28px 24px; }.twin-body { grid-template-columns:minmax(0,1fr) 245px; }.twin-inspector { padding:19px 17px; }.twin-canvas { height:520px; }.twin-demo { flex-direction:column; align-items:stretch; gap:14px; }.twin-scenarios button { flex:1; justify-content:center; }.twin-scenarios { width:100%; }.twin-demo-intro { gap:10px; } }
-@media(max-width:1000px) { .twin-body { grid-template-columns:minmax(0,1fr); }.twin-inspector { border-left:0; border-top:1px solid var(--twin-line); display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }.twin-inspector-top,.twin-station-tabs,.twin-zone,.twin-inspector h2,.twin-description { grid-column:1; }.twin-inspector-top { grid-column:1/-1; }.twin-station-tabs { margin:14px 0; }.twin-station-state { grid-column:2; grid-row:2; align-self:center; }.twin-facts { grid-column:2; grid-row:3/6; }.twin-location-note { grid-column:1; margin-bottom:10px; }.twin-report,.twin-virtual-note,.twin-linked-request { grid-column:2; }.twin-report { grid-row:6; align-self:start; }.twin-virtual-note { grid-row:7; }.twin-linked-request { grid-row:8; }.twin-description { margin-bottom:12px; }.twin-expanded { overflow:auto; }.twin-expanded .twin-body { display:block; }.twin-expanded .twin-canvas { height:65vh; }.twin-expanded .twin-inspector { overflow:visible; } }
-@media(max-width:650px) { .twin-page .content { padding:24px 14px; }.twin-toolbar { padding:12px; gap:8px; flex-wrap:wrap; }.twin-floor { flex:1; }.twin-floor > svg { width:23px; height:23px; }.twin-floor span { margin:0 4px; }.twin-view-controls { order:3; width:100%; justify-content:center; margin-top:4px; }.twin-view-controls button { flex:1; justify-content:center; }.twin-canvas { height:440px; }.twin-map-caption { top:16px; left:16px; font-size:6px; }.twin-map-caption small { font-size:7px; }.twin-hotspot { padding:5px; gap:5px; }.hotspot-pin { width:23px; height:25px; }.hotspot-name { font-size:8px; }.hotspot-name small { font-size:6px; }.twin-orbit-hint { display:none; }.twin-map-bottom { left:16px; right:16px; }.twin-map-legend { gap:12px; font-size:6px; }.twin-inspector { display:block; padding:20px; }.twin-inspector-top { margin-bottom:15px; }.twin-station-tabs { float:right; margin:0; }.twin-zone { padding-top:3px; }.twin-inspector h2 { font-size:23px; margin-top:6px; }.twin-description { clear:both; padding-top:8px; }.twin-facts { grid-template-columns:1fr 1fr; }.twin-scenarios { flex-direction:column; }.twin-scenarios button { justify-content:flex-start; padding:12px; }.twin-scenarios button > span:last-child { margin-left:auto; }.twin-demo { padding:17px; }.twin-boundary > span { display:block; margin:0 0 3px; }.twin-expanded { inset:6px; }.twin-expanded .twin-canvas { min-height:400px; }.twin-page .stats > div { padding:14px 12px; }.twin-page .stats strong { font-size:24px; } }
-.twin-side { min-width:0; max-height:650px; overflow:auto; scrollbar-width:thin; scrollbar-color:#4b5c70 #142031; border-left:1px solid var(--twin-line); }
-.twin-side > .twin-inspector { border-left:0; }
-.twin-inspector-switch { display:flex; gap:4px; padding:11px 13px; border-bottom:1px solid var(--twin-line); background:#101c2c; position:sticky; top:0; z-index:5; }
-.twin-inspector-switch button { flex:1; font-size:10px; padding:8px 11px; border:0; border-radius:5px; background:transparent; color:#91a6bf; text-align:left; }
-.twin-inspector-switch button.active { background:#2b3b50; color:#f1dac6; }
-.twin-inspector-switch button span { float:right; opacity:.6; }
-.twin-device-marker .hotspot-pin { background:#f5dfc7; color:#ba713a; font-size:23px; }
-.twin-device-marker .hotspot-name { max-width:140px; white-space:normal; line-height:1.5; }
-.twin-device-marker .hotspot-name small { white-space:nowrap; font-size:7px; }
-.placing-device > canvas, .placing-device > canvas:active { cursor:crosshair; }
-.twin-placement-banner { position:absolute; z-index:8; bottom:80px; left:50%; transform:translateX(-50%); width:max-content; max-width:calc(100% - 24px); background:#172b25ed; color:#eff6e9; border:1px solid #7f9c78; box-shadow:0 4px 15px #152c2730; padding:10px 14px; border-radius:8px; font-size:10px; display:flex; align-items:center; gap:14px; }
-.twin-placement-banner button { background:transparent; border:0; color:#ffbf96; font-size:9px; text-decoration:underline; }
-.twin-device-feedback { padding:10px 20px; background:#28392f; border-top:1px solid #45594a; font-size:10px; color:#c4dfca; }
-.twin-expanded .twin-side { max-height:none; }
-@media(min-width:1001px) { .twin-body { grid-template-columns:minmax(0,1fr) 300px; }.twin-canvas { height:650px; } }
-@media(max-width:1000px) { .twin-side { max-height:none; border-left:0; border-top:1px solid var(--twin-line); } }
-@media(max-width:650px) { .twin-device-marker .hotspot-name { max-width:102px; font-size:8px; }.twin-device-marker .hotspot-name small { font-size:6px; }.twin-placement-banner { font-size:8px; gap:8px; padding:9px 10px; } }
-.office-twin .twin-device-panel { max-height:none; overflow:visible; border-left:0; }
+/* The twin uses the dashboard's tokens from styles.css and adds only what the 3D view needs. */
+.work.work-twin {
+  height: 100svh;
+}
+.work-twin > footer {
+  margin-top: 0;
+}
+.office-twin[hidden] {
+  display: none;
+}
+.office-twin {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 22vw, 320px);
+  gap: clamp(16px, 2vw, 28px);
+}
 
-/* Keep the twin inside the redesigned work column beside the existing agent. */
-.work.work-twin { min-width:0; max-width:none; gap:24px; }
-.work-twin > .office-twin { margin-bottom:0; color-scheme:dark; }
-.work-twin .office-twin:not(.twin-expanded) .twin-body { grid-template-columns:minmax(0,1fr); }
-.work-twin .office-twin:not(.twin-expanded) .twin-canvas { height:clamp(380px,55vh,560px); }
-.work-twin .office-twin:not(.twin-expanded) .twin-side { max-height:none; border-left:0; border-top:1px solid var(--twin-line); }
-.work-twin .twin-demo { flex-direction:column; align-items:stretch; gap:14px; }
-.work-twin .twin-scenarios { flex-wrap:wrap; }
-.work-twin .twin-scenarios button { flex:1; justify-content:center; }
-.work-twin .twin-toolbar { flex-wrap:wrap; gap:10px; }
-.work-twin .twin-inspector { display:block; }
-.office-twin .twin-report { min-height:36px; border:1px solid #e4ab80; background:#e4ab80; color:#182433; font-size:10px; padding:10px 12px; border-radius:7px; }
-.office-twin :focus-visible { outline-color:#ffbd90; }
-@media(max-width:520px) { .work-twin .twin-scenarios { flex-direction:column; }.work-twin .twin-scenarios button { justify-content:flex-start; }.work-twin .office-twin:not(.twin-expanded) .twin-canvas { height:420px; } }
+/* The model */
+.twin-canvas {
+  container-type: inline-size;
+  position: relative;
+  isolation: isolate;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--tint);
+  border-radius: 12px;
+}
+.twin-canvas > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+.twin-canvas > canvas:active {
+  cursor: grabbing;
+}
+.placing-device > canvas,
+.placing-device > canvas:active {
+  cursor: crosshair;
+}
+.twin-pins {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.twin-pin {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px 6px 9px;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: auto;
+  background: var(--paper);
+  border: 0;
+  border-radius: 999px;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+.twin-pin small {
+  display: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+.twin-pin:hover,
+.twin-pin:focus-visible,
+.twin-pin.selected {
+  z-index: 2;
+}
+.twin-pin:hover small,
+.twin-pin:focus-visible small,
+.twin-pin.selected small {
+  display: inline;
+}
+.twin-pin.selected {
+  background: var(--ink);
+  color: var(--paper);
+}
+.twin-pin.selected small {
+  color: #c9c7c0;
+}
+/* On a small model the names would cover each other, so pins shrink to their status dot. */
+@container (max-width: 620px) {
+  .twin-pin:not(.twin-pin-device) {
+    padding: 7px;
+  }
+  .twin-pin > span {
+    display: none;
+  }
+  .twin-pin:hover > span,
+  .twin-pin:focus-visible > span,
+  .twin-pin.selected > span {
+    display: inline;
+  }
+}
+.twin-pin-device {
+  padding: 3px 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.twin-pin-device.low {
+  background: var(--failed);
+}
+.twin-pin-device.selected {
+  background: var(--ink);
+}
+@media (hover: hover) {
+  .twin-pin:not(.selected):hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .twin-pin:not(.selected):hover small {
+    color: #c9c7c0;
+  }
+}
+.twin-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--paper);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--ink);
+  border-radius: 6px;
+}
+.twin-tip[hidden] {
+  display: none;
+}
+.twin-views {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 3px;
+  background: var(--paper);
+  border-radius: 999px;
+}
+.twin-views button {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.twin-placing {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+}
+.twin-update {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100% - 200px);
+  padding: 8px 14px 8px 11px;
+  text-align: left;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 12px;
+  animation: settle 240ms var(--ease-out);
+}
+.twin-update strong,
+.twin-update small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.twin-update strong {
+  font-size: 14px;
+}
+.twin-update small {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.twin-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  font-size: 15px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+/* The details beside the model */
+.twin-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  animation: settle 240ms var(--ease-out);
+}
+.twin-inspector .section-head {
+  flex-wrap: wrap;
+}
+.twin-inspector .row {
+  padding-inline: 4px;
+}
+.twin-inspector .row-status {
+  display: block;
+}
+.twin-inspector .form-actions {
+  margin-top: 12px;
+}
+/* The status at a glance, in the same colours as the agent panel. */
+.twin-status {
+  padding: 14px;
+  background: var(--tint);
+  border-radius: 12px;
+}
+.twin-status strong {
+  display: block;
+  font-size: 22px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.twin-status span {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+}
+.twin-status-working {
+  background: var(--working);
+}
+.twin-status-waiting {
+  background: var(--waiting);
+}
+.twin-status-done {
+  background: var(--done);
+}
+.twin-status-failed {
+  background: var(--failed);
+}
+.twin-fold > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.twin-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.twin-fold > summary h2::before {
+  content: "▸";
+  display: inline-block;
+  width: 16px;
+  transition: transform 140ms var(--ease-out);
+}
+.twin-fold[open] > summary h2::before {
+  transform: rotate(90deg);
+}
+.twin-fold .form-actions + .hint {
+  margin-top: 12px;
+}
+.twin-small {
+  flex: 1;
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+.twin-back {
+  align-self: flex-start;
+  margin: 0 0 -8px;
+}
+.twin-back::before {
+  content: "← ";
+}
+.twin-low {
+  color: #b3261e;
+  font-weight: 650;
+}
+.twin-level {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--tint);
+  border-radius: 12px;
+}
+.twin-level strong {
+  display: block;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+.twin-level span {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.twin-level meter {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin-top: 12px;
+  appearance: none;
+  background: var(--line);
+  border: 0;
+  border-radius: 3px;
+}
+.twin-level meter::-webkit-meter-bar {
+  height: 6px;
+  background: var(--line);
+  border: 0;
+  border-radius: 3px;
+}
+.twin-level meter::-webkit-meter-optimum-value {
+  background: var(--ink);
+  border-radius: 3px;
+}
+.twin-level meter::-moz-meter-bar {
+  background: var(--ink);
+  border-radius: 3px;
+}
+.twin-level.low meter::-webkit-meter-optimum-value {
+  background: var(--failed);
+}
+.twin-level.low meter::-moz-meter-bar {
+  background: var(--failed);
+}
+.twin-settings {
+  margin-top: -12px;
+  padding-bottom: 8px;
+}
+.twin-settings > .full {
+  margin-top: 12px;
+}
+.twin-settings form {
+  margin-top: 12px;
+}
+.twin-settings label {
+  margin: 12px 0 6px;
+}
+.twin-settings input:not([type="range"]),
+.twin-settings select {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 15px;
+  color: inherit;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 10px;
+}
+.twin-settings input[type="range"] {
+  width: 100%;
+  accent-color: var(--ink);
+}
+.twin-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.twin-settings .alert {
+  margin-top: 12px;
+}
+
+@media (max-width: 960px) {
+  .work.work-twin {
+    height: auto;
+    padding: 16px;
+  }
+  .office-twin {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .twin-canvas {
+    height: min(68vh, 100vw);
+  }
+  .twin-inspector {
+    overflow: visible;
+  }
+}

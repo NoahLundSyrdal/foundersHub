@@ -83,6 +83,37 @@ def test_changed_delivery_and_expired_quotes_are_rejected(client):
     assert client.post(f"/api/requests/{task['id']}/approve", json={"proposal_fingerprint": old}).status_code == 409
 
 
+def test_critical_report_is_a_ticket_that_can_be_closed(client):
+    task = client.post("/api/input", json={"board_id": "kitchen", "text": "Smoke reported near the coffee machine"}).json()
+    request = next(r for r in client.get("/api/requests").json() if r["id"] == task["id"])
+    assert request["status"] == "maintenance_open"
+    assert request["intent"] == "maintenance"
+    assert request["assigned_to"] == config.BOARDS["kitchen"].responsible_team
+    assert client.get("/api/state").json()["orders"] == []
+    assert client.post(f"/api/requests/{task['id']}/resolve").json()["status"] == "resolved"
+
+
+def test_rejecting_an_expired_quote_frees_the_item(client):
+    task = client.post("/api/input", json={"board_id": "kitchen", "text": "We need coffee"}).json()
+    conn = client.app.state.conn
+    expired = procurement_workflow.get_context(conn, task["id"])
+    expired["proposal"]["expires_at"] = "2020-01-01T00:00:00.000Z"
+    procurement_workflow.store_context(conn, task["id"], expired)
+
+    blocked = client.post("/api/input", json={"board_id": "kitchen", "text": "We need coffee"}).json()
+    assert blocked["status"] == "done" and "Not ordering again" in blocked["reply"]
+
+    rejected = client.post(f"/api/requests/{task['id']}/reject")
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "resolved"
+    assert rejected.json()["supplier_reference"] is None
+    assert client.post(f"/api/requests/{task['id']}/reject").status_code == 409
+
+    again = client.post("/api/input", json={"board_id": "kitchen", "text": "We need coffee"}).json()
+    assert again["status"] == "awaiting_approval"
+    assert client.get("/api/state").json()["orders"] == []
+
+
 def test_stock_pack_sizes_are_not_order_quantities(client):
     event = {"event_id": "stock-paper", "station_id": "bathroom", "type": "stock_low", "timestamp": "2026-11-05T15:00:00Z", "payload": {"item_id": "toilet-paper", "level": 15}}
     first = client.post("/api/device-events", json=event).json()

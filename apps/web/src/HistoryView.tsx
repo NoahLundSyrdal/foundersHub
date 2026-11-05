@@ -1,5 +1,5 @@
 import type { OfficeRequest, Station } from "@office/contracts";
-import { isMerged, money, requestTitle, stamp } from "./format";
+import { isMerged, isTicket, money, requestTitle, stamp } from "./format";
 
 const dayLabel = (value: string) => {
   const date = new Date(value);
@@ -25,9 +25,8 @@ export function HistoryView({
   disabled: boolean;
   onOpen: (id: string) => void;
 }) {
-  // A pressed button with nothing said yet has no history to show.
   const entries = requests
-    .filter((r) => r.original_text || r.intent)
+    .filter(isTicket)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const days = new Map<string, OfficeRequest[]>();
   for (const entry of entries) {
@@ -35,7 +34,7 @@ export function HistoryView({
     days.set(label, [...(days.get(label) ?? []), entry]);
   }
   return (
-    <section aria-label="History">
+    <section className="history" aria-label="History">
       <div className="section-head">
         <h2>History</h2>
         <span>Latest requests, with their current status</span>

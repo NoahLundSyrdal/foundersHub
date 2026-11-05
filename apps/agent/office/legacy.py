@@ -20,7 +20,9 @@ def request_view(conn, task_id: str) -> dict:
         status = "processing"
     elif status == "done":
         status = ("resolved" if order["status"] == "delivered" else "ordered") if order else (
-            ("resolved" if ticket["status"] == "resolved" else "maintenance_open") if ticket else "needs_clarification")
+            ("resolved" if ticket["status"] == "resolved" else "maintenance_open") if ticket else
+            # A finished proposal with no order was refused, so nothing is left to do.
+            "resolved" if task.get("proposal") else "needs_clarification")
     proposal = task.get("proposal")
     return {
         "id": task_id, "station_id": task["board_id"], "user_id": None,
@@ -54,14 +56,16 @@ class Approval(BaseModel):
 
 
 def router(conn):
+    # Routes are async on purpose: they share one SQLite connection, and a plain def
+    # would run on a worker thread, where parallel reads return errors or wrong rows.
     routes = APIRouter()
 
     @routes.get("/api/stations")
-    def stations():
+    async def stations():
         return config._load("config/stations.json")
 
     @routes.get("/api/requests")
-    def requests():
+    async def requests():
         return [request_view(conn, t["id"]) for t in db.rows(conn, "SELECT id FROM tasks ORDER BY rowid DESC LIMIT 200")]
 
     @routes.post("/api/requests/{task_id}/transcript")
@@ -96,8 +100,22 @@ def router(conn):
             raise HTTPException(409, str(error)) from error
         return request_view(conn, task_id)
 
+    @routes.post("/api/requests/{task_id}/reject")
+    async def reject(task_id: str, request: Request):
+        """Decline a proposal directly, with no model call, so it works even if the quote expired."""
+        async with request.app.state.mutation_lock:
+            current = request_view(conn, task_id)
+            if current["status"] != "awaiting_approval":
+                raise HTTPException(409, "Only a request awaiting approval can be rejected")
+            if db.row(conn, "SELECT 1 FROM procurement_attempts WHERE task_id=?", task_id):
+                raise HTTPException(409, "Execution was attempted; reconcile it first")
+            reply = "Not ordered: the proposal was rejected."
+            db.set_command(conn, current["station_id"], reply, "amber")
+            agent._update(conn, task_id, status="done", reply=reply, pending="[]")
+            return request_view(conn, task_id)
+
     @routes.post("/api/requests/{task_id}/resolve")
-    def resolve(task_id: str):
+    async def resolve(task_id: str):
         current = request_view(conn, task_id)
         if current["status"] not in {"ordered", "maintenance_open"}:
             raise HTTPException(409, "Only maintenance or ordered requests can be resolved")

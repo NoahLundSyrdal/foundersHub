@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { OfficeRequest } from "@office/contracts";
 import { Avatar, type Mood } from "./Avatar";
 import { isMerged, money, stamp } from "./format";
 
 const PACE_MS = 500;
 const FRESH_MS = 5000;
-const FEED_LINES = 3;
+const FEED_LINES = 1;
 const moodLabels: Record<Mood, string> = {
   idle: "Resting",
   working: "Working",
@@ -51,7 +51,7 @@ function caption(request: OfficeRequest): { title: string; note?: string } {
     case "processing":
       return { title: workingCaptions[1] };
     case "needs_clarification":
-      return { title: request.question ?? "I need a little more detail." };
+      return { title: "I need a little more detail." };
     case "awaiting_approval":
       return request.proposal
         ? {
@@ -107,13 +107,13 @@ function usePaced(target: number, key: string | undefined, fresh: boolean) {
 export function AgentStage({
   request,
   stationName,
-  provider,
   offline,
+  children,
 }: {
   request: OfficeRequest | undefined;
   stationName: string | undefined;
-  provider: string | undefined;
   offline: boolean;
+  children: ReactNode;
 }) {
   const real = request ? position(request) : { step: -1, mood: "idle" as Mood };
   const trace = request?.trace ?? [];
@@ -141,7 +141,7 @@ export function AgentStage({
     : !request
       ? {
           title: "All quiet.",
-          note: "Press a station when something runs out or breaks.",
+          note: "Nothing needs you right now.",
         }
       : catchingUp && step < workingCaptions.length
         ? { title: workingCaptions[step] }
@@ -158,9 +158,7 @@ export function AgentStage({
           <a className="wordmark" href="/" aria-label="Office home">
             office
           </a>
-          <span>
-            Simulation{provider ? ` · ${provider} agent` : ""}
-          </span>
+          <span>Simulation</span>
         </header>
         <Avatar mood={mood} request={offline ? undefined : request} />
         <div className="stage-copy" aria-live="polite">
@@ -198,11 +196,14 @@ export function AgentStage({
                     aria-current={state === "current" ? "step" : undefined}
                   >
                     <i aria-hidden="true" />
-                    {label}
+                    <span className="sr-only">{label}</span>
                   </li>
                 );
               })}
             </ol>
+            <p className="stage-step" aria-hidden="true">
+              {steps[Math.min(step, steps.length - 1)]}
+            </p>
             {shown.length > 0 && (
               <ol className="stage-feed" aria-label="Latest agent steps">
                 {shown.slice(-FEED_LINES).map((entry) => (
@@ -215,6 +216,7 @@ export function AgentStage({
             )}
           </div>
         )}
+        {children}
       </div>
     </section>
   );

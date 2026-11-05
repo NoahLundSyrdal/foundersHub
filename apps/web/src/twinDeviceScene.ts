@@ -2,14 +2,15 @@ import * as THREE from "three";
 import type { TwinDevice } from "./twinDevices";
 
 /** Device markers are deliberately enlarged so their physical locations remain legible. */
-export function createDeviceMesh(device: TwinDevice, selected: boolean, status: string) {
+export function createDeviceMesh(device: TwinDevice, selected: boolean, statusColor: number | null) {
   const group = new THREE.Group();
   group.position.set(device.position.x, 0.17, device.position.z);
   group.userData.deviceId = device.id;
-  const color = device.kind === "level" && device.tracking.value <= device.tracking.warningBelow ? 0xe28b55 : status === "attention" ? 0xda7860 : status === "pending" ? 0xf4ae5d : 0x75aa91;
-  const white = new THREE.MeshStandardMaterial({ color: 0xf2f0e7, roughness: 0.5 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x243442, roughness: 0.55 });
-  const accent = new THREE.MeshStandardMaterial({ color: device.kind === "button" ? 0xf8a361 : color, roughness: 0.35, emissive: color, emissiveIntensity: selected ? 0.32 : 0.08 });
+  const low = device.kind === "level" && device.tracking.value <= device.tracking.warningBelow;
+  const color = low ? 0xff6b66 : statusColor ?? 0xc4d2ff;
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x15130f, roughness: 0.55 });
+  const accent = new THREE.MeshStandardMaterial({ color, roughness: 0.35, emissive: color, emissiveIntensity: selected ? 0.32 : 0.08 });
   function box(w: number, h: number, d: number, y: number, material: THREE.Material) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
     mesh.position.y = y;
@@ -38,11 +39,13 @@ export function createDeviceMesh(device: TwinDevice, selected: boolean, status: 
     const fill = box(0.33, height, 0.04, 0.25 + height / 2, accent);
     fill.position.z = 0.25;
   }
-  const ring = new THREE.Mesh(new THREE.RingGeometry(selected ? 0.67 : 0.53, selected ? 0.76 : 0.59, 48), new THREE.MeshBasicMaterial({ color: selected ? 0xf3a86c : color, side: THREE.DoubleSide, transparent: true, opacity: selected ? 1 : 0.65, depthTest: false }));
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.015;
-  ring.renderOrder = 3;
-  group.add(ring);
+  if (selected) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.67, 0.76, 48), new THREE.MeshBasicMaterial({ color: 0x15130f, side: THREE.DoubleSide, depthTest: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.015;
+    ring.renderOrder = 3;
+    group.add(ring);
+  }
   return group;
 }
 export function disposeDeviceMeshes(group: THREE.Group) {
