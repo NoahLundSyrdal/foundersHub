@@ -190,6 +190,11 @@ export const FacilityMetricSchema = z.enum([
   "obstruction_mm", "noise_level", "tilt_deg", "heartbeat",
 ]);
 export const FacilityActionSchema = z.enum(["alert", "ticket", "replenish", "sound"]);
+export const FacilityScheduleSchema = z.strictObject({
+  timezone: z.string().min(1).max(128),
+  start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  end: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+});
 export const FacilityRuleSchema = z.strictObject({
   id: z.string().min(1).max(80),
   title: z.string().min(1).max(120),
@@ -206,6 +211,7 @@ export const FacilityRuleSchema = z.strictObject({
   severity: z.enum(["routine", "urgent", "critical"]),
   item_id: z.string().min(1).max(128).nullable(),
   summary: z.string().min(1).max(500),
+  schedule: FacilityScheduleSchema.nullable().optional(),
 });
 export type FacilityRule = z.infer<typeof FacilityRuleSchema>;
 export const FacilityReadingSchema = z.strictObject({

@@ -5,9 +5,10 @@ import json
 import math
 import sqlite3
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Callable, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -61,6 +62,66 @@ class FacilityReading(BaseModel):
         return self
 
 
+class FacilitySchedule(BaseModel):
+    """Daily local-time window. UTC sample timestamps handle DST unambiguously."""
+    model_config = ConfigDict(extra='forbid', strict=True)
+    timezone: str = Field(min_length=1, max_length=128)
+    start: str = Field(pattern=r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$')
+    end: str = Field(pattern=r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$')
+
+    @field_validator('timezone')
+    @classmethod
+    def valid_timezone(cls, value):
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as error:
+            raise ValueError('Schedule requires a valid IANA timezone') from error
+        return value
+
+    @model_validator(mode='after')
+    def nonempty_window(self):
+        if self.start == self.end:
+            raise ValueError('Schedule start and end must differ')
+        return self
+
+    def window(self, at: datetime) -> str | None:
+        """Return the local start date of an active window, otherwise None.
+
+        The window identity prevents debounce samples on separate nights from
+        combining even when no telemetry arrived during the inactive interval.
+        """
+        local = at.astimezone(ZoneInfo(self.timezone))
+        minute = local.hour * 60 + local.minute
+        start = int(self.start[:2]) * 60 + int(self.start[3:])
+        end = int(self.end[:2]) * 60 + int(self.end[3:])
+        if start < end:
+            return local.date().isoformat() if start <= minute < end else None
+        if minute >= start:
+            return local.date().isoformat()
+        if minute < end:
+            return (local.date() - timedelta(days=1)).isoformat()
+        return None
+
+
+    def continuous_between(self, start: datetime, end: datetime) -> bool:
+        """Check a bounded sample gap across DST transitions.
+
+        The evaluator only calls this for gaps <= max_gap_seconds (one hour).
+        Minute-granularity windows can transition only at minute boundaries.
+        A repeated local hour may contain a closed interval even when both
+        endpoints share the same local window date.
+        """
+        window = self.window(end)
+        if window is None or self.window(start) != window:
+            return False
+        cursor = start.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        while cursor <= end:
+            if self.window(cursor) != window:
+                return False
+            cursor += timedelta(minutes=1)
+        return True
+
+
 class FacilityRule(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True, allow_inf_nan=False)
     id: str = Field(min_length=1, max_length=80)
@@ -78,6 +139,7 @@ class FacilityRule(BaseModel):
     severity: Literal['routine', 'urgent', 'critical']
     item_id: str | None = Field(default=None, min_length=1, max_length=128)
     summary: str = Field(min_length=1, max_length=500)
+    schedule: FacilitySchedule | None = None
 
     @field_validator('id', 'board_id', 'title', 'summary')
     @classmethod
@@ -91,6 +153,8 @@ class FacilityRule(BaseModel):
         if len(set(self.actions)) != len(self.actions):
             raise ValueError('Actions must be unique')
         if self.direction == 'stale':
+            if self.schedule is not None:
+                raise ValueError('Stale heartbeat rules cannot have schedules')
             if self.metric != 'heartbeat' or not 1 <= self.trigger_value <= 86400:
                 raise ValueError('Stale rules require heartbeat and a timeout of 1–86400 seconds')
             if any(x in self.actions for x in ('replenish', 'ticket', 'sound')):
@@ -259,12 +323,17 @@ class FacilityEngine:
             state['last_at'] = reading.timestamp
             self._put('facility_states', key, state)
             return None
-        if not trigger:
+        window = rule.schedule.window(at) if rule.schedule is not None else None
+        if (rule.schedule is not None and window is None) or not trigger:
             self._put('facility_states', key, {'last_at': reading.timestamp})
             return None
         gap = (at - _time(state['last_at'])).total_seconds() if state.get('last_at') else math.inf
-        if not state.get('started_at') or gap > rule.max_gap_seconds:
-            state = {'started_at': reading.timestamp, 'samples': 0}
+        continuous = True
+        if rule.schedule is not None and state.get('started_at') and gap <= rule.max_gap_seconds:
+            continuous = rule.schedule.continuous_between(_time(state['last_at']), at)
+        if (not state.get('started_at') or gap > rule.max_gap_seconds or not continuous
+                or (rule.schedule is not None and state.get('schedule_window') != window)):
+            state = {'started_at': reading.timestamp, 'samples': 0, 'schedule_window': window}
         state['samples'] += 1
         state['last_at'] = reading.timestamp
         if state['samples'] >= rule.min_samples and (at - _time(state['started_at'])).total_seconds() >= rule.min_duration_seconds:

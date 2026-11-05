@@ -113,7 +113,10 @@
     "trigger_value": 20.0,
     "reset_value": 30.0,
     "min_duration_seconds": 0.0,
-    "actions": ["alert", "replenish"],
+    "actions": [
+      "alert",
+      "replenish"
+    ],
     "summary": "Calibrated bathroom stock check is low; prepare one catalogue unit of toilet paper."
   },
   {
@@ -212,5 +215,57 @@
       "alert"
     ],
     "summary": "No fresh telemetry from this board; readings are unknown."
+  },
+  {
+    "id": "overnight-temperature-low",
+    "title": "Possible open window or heating issue",
+    "board_id": "kitchen",
+    "metric": "temperature_c",
+    "enabled": true,
+    "direction": "below",
+    "trigger_value": 16.0,
+    "reset_value": 18.0,
+    "min_samples": 3,
+    "min_duration_seconds": 900.0,
+    "max_gap_seconds": 120.0,
+    "actions": [
+      "alert",
+      "ticket",
+      "sound"
+    ],
+    "severity": "urgent",
+    "item_id": null,
+    "summary": "Sustained low room temperature overnight; check windows and heating. Window state is unconfirmed.",
+    "schedule": {
+      "timezone": "Europe/Oslo",
+      "start": "22:00",
+      "end": "07:00"
+    }
+  },
+  {
+    "id": "overnight-humidity-high",
+    "title": "Persistent moisture conditions overnight",
+    "board_id": "kitchen",
+    "metric": "humidity_pct",
+    "enabled": true,
+    "direction": "above",
+    "trigger_value": 60.0,
+    "reset_value": 55.0,
+    "min_samples": 3,
+    "min_duration_seconds": 1800.0,
+    "max_gap_seconds": 120.0,
+    "actions": [
+      "alert",
+      "ticket",
+      "sound"
+    ],
+    "severity": "urgent",
+    "item_id": null,
+    "summary": "Persistent high relative humidity overnight; inspect moisture sources and cold surfaces. This is not a mold diagnosis.",
+    "schedule": {
+      "timezone": "Europe/Oslo",
+      "start": "22:00",
+      "end": "07:00"
+    }
   }
 ]

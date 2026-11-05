@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from office import db
-from office.facility_rules import FacilityEngine, FacilityReading, FacilityRule
+from office.facility_rules import FacilityEngine, FacilityReading, FacilityRule, FacilitySchedule
 
 
 class Clock:
@@ -248,3 +248,145 @@ def test_config_edit_discards_candidate_samples_without_creating_incident(setup)
     clock.advance(15)
     incident = engine.ingest(reading(clock))['incidents'][0]
     assert incident['actions'] == ['alert']
+
+
+def scheduled_rule(engine, id='temperature-low', **updates):
+    value = get_rule(engine, id).model_dump() | {
+        'schedule': {'timezone': 'Europe/Oslo', 'start': '22:00', 'end': '07:00'},
+        'min_samples': 2, 'min_duration_seconds': 10.0,
+    } | updates
+    return FacilityRule.model_validate(value)
+
+
+def test_overnight_schedule_boundaries_and_backward_compatibility(setup):
+    _, _, engine = setup
+    assert get_rule(engine).schedule is None
+    schedule = FacilitySchedule(timezone='Europe/Oslo', start='22:00', end='07:00')
+    # November Oslo is UTC+1; both sides of midnight share one window.
+    assert schedule.window(datetime(2026, 11, 5, 20, 59, 59, tzinfo=UTC)) is None
+    assert schedule.window(datetime(2026, 11, 5, 21, 0, tzinfo=UTC)) == '2026-11-05'
+    assert schedule.window(datetime(2026, 11, 5, 23, 0, tzinfo=UTC)) == '2026-11-05'
+    assert schedule.window(datetime(2026, 11, 6, 5, 59, 59, tzinfo=UTC)) == '2026-11-05'
+    assert schedule.window(datetime(2026, 11, 6, 6, 0, tzinfo=UTC)) is None
+    assert schedule.window(datetime(2026, 11, 6, 11, 0, tzinfo=UTC)) is None
+    daytime = FacilitySchedule(timezone='Europe/Oslo', start='09:00', end='17:00')
+    assert daytime.window(datetime(2026, 11, 5, 8, tzinfo=UTC)) == '2026-11-05'
+    assert daytime.window(datetime(2026, 11, 5, 16, tzinfo=UTC)) is None
+
+
+def test_schedule_rejects_invalid_timezone_time_and_stale_rule(setup):
+    _, _, engine = setup
+    valid = {'timezone': 'Europe/Oslo', 'start': '22:00', 'end': '07:00'}
+    for update in ({'timezone': 'Invalid/Zone'}, {'timezone': '../Oslo'}, {'timezone': ' Europe/Oslo'},
+                   {'start': '24:00'}, {'end': '07:60'}, {'start': '7:00'},
+                   {'start': '22:00:00'}, {'start': 2200}, {'end': '22:00'}):
+        with pytest.raises(ValidationError):
+            FacilitySchedule.model_validate(valid | update)
+    with pytest.raises(ValidationError, match='cannot have schedules'):
+        scheduled_rule(engine, 'telemetry-offline')
+
+
+def test_nighttime_rule_cannot_activate_during_day_but_recovers_outside_schedule(setup):
+    conn, clock, engine = setup
+    engine.save_rule(scheduled_rule(engine))
+    for seconds in (0, 15, 15):
+        clock.advance(seconds)
+        assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'] == []
+    assert engine.snapshot()['incidents'] == []
+    clock.at = datetime(2026, 11, 5, 21, 0, tzinfo=UTC)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'] == []
+    clock.advance(10)
+    incident = engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'][0]
+    assert incident['rule_id'] == 'temperature-low'
+    clock.at = datetime(2026, 11, 6, 10, 0, tzinfo=UTC)
+    # Clock movement alone and restart never manufacture recovery.
+    engine = FacilityEngine(conn, clock=clock)
+    assert engine.snapshot()['incidents'][0]['status'] == 'active'
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'] == []
+    clock.advance(1)
+    recovered = engine.ingest(reading(clock, metric='temperature_c', value=20.0))['incidents'][0]
+    assert recovered['id'] == incident['id']
+    assert recovered['status'] == 'recovered'
+
+
+def test_debounce_does_not_cross_inactive_interval_even_without_inactive_samples(setup):
+    _, clock, engine = setup
+    # One minute of inactivity is shorter than max_gap: window identity must
+    # still discard the samples collected before that inactive interval.
+    schedule = {'timezone': 'Europe/Oslo', 'start': '22:00', 'end': '21:59'}
+    engine.save_rule(scheduled_rule(engine, schedule=schedule, max_gap_seconds=300.0,
+                                    min_samples=3, min_duration_seconds=30.0))
+    clock.at = datetime(2026, 11, 5, 20, 58, 30, tzinfo=UTC)
+    engine.ingest(reading(clock, metric='temperature_c', value=10.0))
+    clock.advance(15)
+    engine.ingest(reading(clock, metric='temperature_c', value=10.0))
+    clock.at = datetime(2026, 11, 5, 21, 0, 0, tzinfo=UTC)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'] == []
+    clock.advance(15)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'] == []
+    clock.advance(15)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'][0]['status'] == 'active'
+
+
+def test_outside_schedule_samples_are_discarded_before_next_window(setup):
+    _, clock, engine = setup
+    schedule = {'timezone': 'Europe/Oslo', 'start': '22:00', 'end': '21:59'}
+    engine.save_rule(scheduled_rule(engine, schedule=schedule, max_gap_seconds=300.0))
+    clock.at = datetime(2026, 11, 5, 20, 58, 55, tzinfo=UTC)
+    engine.ingest(reading(clock, metric='temperature_c', value=10.0))
+    clock.advance(10)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'] == []
+    clock.at = datetime(2026, 11, 5, 21, 0, tzinfo=UTC)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'] == []
+    clock.advance(10)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'][0]['status'] == 'active'
+
+
+def test_schedule_handles_oslo_spring_and_fall_dst_using_utc_samples(setup):
+    _, clock, engine = setup
+    schedule = FacilitySchedule(timezone='Europe/Oslo', start='22:00', end='07:00')
+    # Spring jump skips 02:00 local. Both samples are still the same overnight window.
+    assert schedule.window(datetime(2026, 3, 29, 0, 59, 59, tzinfo=UTC)) == '2026-03-28'
+    assert schedule.window(datetime(2026, 3, 29, 1, 0, tzinfo=UTC)) == '2026-03-28'
+    assert schedule.window(datetime(2026, 3, 29, 5, 0, tzinfo=UTC)) is None  # 07:00 CEST
+    # Both repeated 02:30 local times are active, and UTC duration remains real elapsed time.
+    assert schedule.window(datetime(2026, 10, 25, 0, 30, tzinfo=UTC)) == '2026-10-24'
+    assert schedule.window(datetime(2026, 10, 25, 1, 30, tzinfo=UTC)) == '2026-10-24'
+    assert schedule.window(datetime(2026, 10, 25, 6, 0, tzinfo=UTC)) is None  # 07:00 CET
+    engine.save_rule(scheduled_rule(engine, min_duration_seconds=3600.0, max_gap_seconds=3600.0))
+    clock.at = datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
+    engine.ingest(reading(clock, metric='temperature_c', value=10.0))
+    clock.advance(3600)
+    incident = engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'][0]
+    assert incident['status'] == 'active'
+
+
+def test_scheduled_rule_persistence_and_live_simulation_isolation(setup):
+    conn, clock, engine = setup
+    engine.save_rule(scheduled_rule(engine))
+    engine = FacilityEngine(conn, clock=clock)
+    assert get_rule(engine, 'temperature-low').schedule.timezone == 'Europe/Oslo'
+    clock.at = datetime(2026, 11, 5, 21, 0, tzinfo=UTC)
+    engine.ingest(reading(clock, metric='temperature_c', value=10.0))
+    clock.advance(10)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0, simulation=True))['incidents'] == []
+    clock.advance(10)
+    incident = engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'][0]
+    assert incident['simulation'] is False
+    clock.advance(1)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=20.0, simulation=True))['incidents'] == []
+    assert engine.snapshot()['incidents'][0]['status'] == 'active'
+
+
+def test_dst_repeated_hour_cannot_bridge_an_inactive_schedule_interval(setup):
+    _, clock, engine = setup
+    engine.save_rule(scheduled_rule(engine, max_gap_seconds=3600.0, schedule={
+        'timezone': 'Europe/Oslo', 'start': '02:00', 'end': '02:30',
+    }))
+    clock.at = datetime(2026, 10, 25, 0, 20, tzinfo=UTC)  # 02:20 CEST, first fold
+    engine.ingest(reading(clock, metric='temperature_c', value=10.0))
+    clock.at = datetime(2026, 10, 25, 1, 5, tzinfo=UTC)  # 02:05 CET, second fold
+    # The intervening 02:30–03:00 CEST was outside the configured window.
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'] == []
+    clock.advance(60)
+    assert engine.ingest(reading(clock, metric='temperature_c', value=10.0))['incidents'][0]['status'] == 'active'
