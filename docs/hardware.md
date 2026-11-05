@@ -32,18 +32,26 @@ our kit or their numbered ports. Record those below before writing firmware.
 
 ## Confirm before firmware work
 
-Record the actual setup here or alongside the firmware project:
+Port map of our 14-port board, probed on 2026-11-05 with test firmware (`atech` SDK 1.0.0a12).
 
-| Component | Confirmed hardware / port |
-| --- | --- |
-| Motherboard model | 14-port (confirmed by the team) |
-| Kitchen button | To confirm |
-| Bathroom button | To confirm |
-| Printer button | To confirm |
-| Display | To confirm |
-| LED grid | To confirm |
-| Distance sensor | Optional; to confirm |
-| Microphone | Optional; to confirm |
+**Orientation:** the SDK's layout has port 7 at the top-middle and USB-C (port 8) at the bottom-middle. Lying flat with the USB-C cable pointing **up**, the board is rotated 180° from that. So the left column in that view is ports 14 → 9 (top to bottom, reset slot 12 in between), and the right column is ports 6 → 1.
+
+| Module | Port(s) | How it was confirmed |
+| --- | --- | --- |
+| Speaker (bottom-right, overhangs) | 1–2 | **Verified by ear:** `spk_play_rtttl` played a melody |
+| Button V2.0 | 3 | **Verified:** a press sends `btn` = 1, release sends 0 |
+| CO₂ sensor (SCD40), where the third light grid was | 4 | **Verified:** answers on I2C and reads ~1100 ppm |
+| Light grid (second from top, right column) | 5 | **Verified by eye:** lit red when port 5 was driven |
+| Light grid (top, right column) | 6 | **Verified by eye:** lit green when port 6 was driven |
+| Port 7 (bottom-middle in that view) | empty | Visible "7" label |
+| Distance sensor (bottom-left) | 9 | **Verified:** answers and reads live distances |
+| Temperature & humidity (V1.1) | 10 | **Verified:** answers, ~28 °C / 26 % RH |
+| Screen (ST7735, 2 ports), top-left | 13–14 | **Verified by eye:** showed text after we swapped it with the microphone |
+| Microphone (2 ports) | not usable where it sits | Moved to the old screen spot, which covers port 11 and the reset slot (12). That's not a valid pair. We use the laptop mic. |
+
+The screen originally sat across port 11 and the reset slot and showed nothing. Swapping it with the microphone fixed it.
+
+Valid 2-port pairs: 1–2, 2–3, 3–4, 4–5, 5–6, 9–10, 10–11, 13–14. With distance on 9 and temperature on 10, the right side has only one free valid pair (13–14), so the screen and the microphone can't both be on it.
 
 Use a USB-C **data** cable. Read the current Atech SDK guide for the actual board and modules before creating firmware. Do not guess pin assignments from a different board. The first SDK build may download a large compiler bundle; do not wait until the pitch to test setup.
 

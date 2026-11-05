@@ -21,7 +21,7 @@ Open **http://localhost:5173**. The backend listens on **http://127.0.0.1:3001**
 
 No API key is needed with `OFFICE_MODEL=mock`. For live Pydantic AI, set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY` in the ignored `.env` file. Supplier execution remains simulated. Optional `TAVILY_API_KEY` enables supplier and FINN discovery.
 
-The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity assessment, exact approval and critical dashboard alerts. See [the procurement guide](docs/procurement.md) for endpoints and configuration. `AGENT_DATABASE_PATH` defaults to `.data/agent.sqlite`, separate from the older TypeScript database.
+The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity assessment, exact approval and critical dashboard alerts. See [the procurement guide](docs/procurement.md) for endpoints and configuration. `AGENT_DATABASE_PATH` defaults to `.data/agent.sqlite`.
 
 See [deterministic facility rules and hardware acceptance steps](docs/facility-rules.md) for backend sensor thresholds, controlled replenishment, local inspection tasks and station sound commands.
 
@@ -50,13 +50,14 @@ See [the demo guide](docs/demo.md) for the full sequence and [hardware notes](do
 ```text
 apps/web/                 React dashboard, browser voice input, approvals
 apps/agent/               Python API, Pydantic agent, SQLite, approvals, board integration
-apps/server/              Previous TypeScript backend (inactive reference)
 apps/procurement/         Pydantic AI worker, severity and supplier/FINN discovery
-apps/device/              Python USB bridge, simulator, device tests
+apps/device/              Atech SDK bridge + kitchen firmware (verified board), USB bridge, simulator, tests
 packages/contracts/       Shared TypeScript schemas and generated JSON Schema
 config/stations.json      Station locations, equipment, teams, catalogue scope
 config/office.json        Office preferences and spending policy
+config/brain/             Offline copy of the Notion company brain: procedures, approval routing
 fixtures/products.json    Explicitly simulated catalogue
+docs/atech.md             Atech platform and SDK reference
 ```
 
 The backend owns persistent state and purchase execution. The web app and device bridge call its API; neither writes the database directly.
@@ -66,8 +67,8 @@ The backend owns persistent state and purchase execution. The web app and device
 | Owner | Area | First integration milestone |
 | --- | --- | --- |
 | 1 · Hardware | `apps/device/`, actual port mapping | Button event reaches API; feedback reaches board |
-| 2 · Agent and speech | `apps/server/src/agent/`, speech adapter | Transcript plus station produces validated intent |
-| 3 · Procurement | `apps/server/src/procurement/`, supplier adapters | Approved proposal produces a tracked execution result |
+| 2 · Agent and speech | `apps/agent/office/agent.py`, `apps/agent/office/voice.py` | Transcript plus station produces validated intent |
+| 3 · Procurement | `apps/procurement/`, `apps/agent/office/procurement_workflow.py` | Approved proposal produces a tracked execution result |
 | 4 · Dashboard and integration | `apps/web/`, core API/database | Full request → approval → confirmation flow |
 
 Agree contract changes in `packages/contracts/` before changing callers. Use short-lived branches and integrate early. Keep one integration owner; avoid editing another owner's files without coordinating.
@@ -108,12 +109,13 @@ Automatic extraction uses your installed agent's login and subscription or API u
 | `npm test` | Backend tests and Python device tests |
 | `npm run contracts:export` | Regenerate device JSON Schema from shared contracts |
 | `npm run device:simulate` | Submit a sample kitchen request to a running API |
+| `npm run connect -- notion\|sync` | One-time Notion sign-in; re-sync the company brain |
 
 Runtime database files live in ignored `.data/` by default. Stop the backend before removing its database to reset local demo data. Never commit `.env`, recordings, credentials, or runtime databases.
 
 ## Technology choices
 
-The application uses a Python FastAPI/Pydantic AI backend with one SQLite owner and a React/TypeScript frontend. Three.js renders the office twin. The live Anthropic path has bounded model/tool usage; deterministic mock interpretation remains available without credentials. The older TypeScript API is retained under `npm run dev:legacy` for reference.
+The application uses a Python FastAPI/Pydantic AI backend with one SQLite owner and a React/TypeScript frontend. Three.js renders the office twin. The live Anthropic path has bounded model/tool usage; deterministic mock interpretation remains available without credentials.
 
 The important technical boundaries are validated decisions, exact proposal approval, persisted execution attempts, and idempotent input. Optional supplier/FINN discovery is read-only. Live stock telemetry, speaker identity, supplier checkout and contractor booking remain separate integrations. See [the architecture rationale](docs/architecture.md#technology-rationale).
 
@@ -122,6 +124,25 @@ The important technical boundaries are validated decisions, exact proposal appro
 The application ranks approved fixture offers by landed price, quality and delivery; those inputs remain simulated. Real purchasing needs a supplier adapter, confirmed delivery terms, authenticated approval, credentials and reconciliation of uncertain execution results. Maintenance tickets are local records; service proposals do not book real contractors.
 
 See [architecture and API contracts](docs/architecture.md), [demo steps](docs/demo.md), and [hardware setup](docs/hardware.md). MCP can expose the same backend capabilities later; it is not required to connect the first three apps.
+
+## Company brain on Notion
+
+Notion holds the office's procedures and an **approval routing** table: which person approves which kind of approval. Application code reads the table and attaches the approver to every proposal; the model never chooses who approves. The dashboard shows it above the approve buttons ("For Leo · Above the office cap of 1000 NOK per order").
+
+| Approval type | When (decided by the server) |
+| --- | --- |
+| `purchase` | A simulated order that office policy sends to a human |
+| `purchase_over_cap` | Any order above `max_order_nok`. It is no longer refused: if no offer fits under the cap, the best one goes to this approver, and it always needs a human |
+| `contractor` | A service visit (plumbing, ventilation, printer repair) |
+| `default` | Fallback when a type has no row |
+
+Offline and in mock mode the brain is the checked-in copy in `config/brain/`. With a live model, connect Notion once and point it at the brain's root page:
+
+```sh
+npm run connect -- notion   # browser sign-in to Notion's hosted MCP; token in ignored .data/oauth/
+```
+
+Set `NOTION_BRAIN_PAGE_ID` to a page whose child pages hold the procedures and a table with `Approval type | Approver` (same shape as `config/brain/approval-routing.md`, with at least `purchase` and `purchase_over_cap`). `npm run connect -- sync` or `POST /api/brain/sync` re-reads it into `.data/brain/`; a sync without a valid routing table is refused and the previous snapshot stays. `GET /api/brain` shows what is in use. The agent also gets Notion's read-only tools; if Notion is down, a run continues without them. It keeps an office notebook across tasks (Pydantic AI Harness `Memory`, `.data/memory.sqlite`, live mode only).
 
 ## Food on Oda
 

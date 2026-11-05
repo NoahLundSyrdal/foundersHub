@@ -2,6 +2,7 @@
 
 import base64
 import asyncio
+import binascii
 import json
 import math
 from contextlib import asynccontextmanager, suppress
@@ -10,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from office import agent, bus, config, db, voice, procurement_workflow, legacy
+from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import facility_api, oda_food, oda_api, work_api
 from office.facility_rules import FacilityReading
 
@@ -37,7 +38,7 @@ class Decision(BaseModel):
     proposal_fingerprint: str | None = None
 
 
-class DeviceEvent(BaseModel):  # legacy shape still emitted by apps/device/src/bridge.py
+class DeviceEvent(BaseModel):  # shape emitted by apps/device/src/bridge.py
     event_id: str
     station_id: str
     type: str  # button_pressed | speech_transcript | stock_low
@@ -78,7 +79,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.state.facilities = facilities
     app.state.oda_food = groceries
     app.state.work = work
-    app.include_router(legacy.router(conn))
+    app.include_router(requests_api.router(conn))
     app.include_router(facility_api.router(facilities))
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
@@ -94,7 +95,21 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
 
     @app.get("/api/health")
     async def health():
-        return {"ok": True, "model": config.MODEL, "orders": "simulated", "agent_provider": config.MODEL, "supplier_provider": "mock", "simulation": True}
+        return {"ok": True, "model": config.MODEL, "orders": "simulated", "agent_provider": config.MODEL, "supplier_provider": "mock", "simulation": True,
+                "brain": "notion snapshot" if brain.source() == brain.SNAPSHOT else "local copy (config/brain)", "integrations": integrations.status()}
+
+    @app.get("/api/brain")
+    async def get_brain():
+        """Company brain in use: where it came from, the approval routing table, and the procedure documents."""
+        return {"source": str(brain.source().relative_to(config.ROOT)), "routing": brain.routing(), "docs": brain.docs()}
+
+    @app.post("/api/brain/sync")
+    async def sync_brain():
+        """Re-read the brain from Notion (NOTION_BRAIN_PAGE_ID). 409 if not connected or the routing table is invalid."""
+        try:
+            return await brain.sync()
+        except brain.BrainError as e:
+            raise HTTPException(409, str(e)) from e
 
     @app.get("/api/boards")
     async def boards():
@@ -117,9 +132,12 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         board_or_404(body.board_id)
         text, person = body.text, body.person
         if body.audio_b64:
-            audio = base64.b64decode(body.audio_b64)
-            text = text or voice.transcribe(audio)
-            person = person or voice.identify(audio)
+            try:
+                audio = base64.b64decode(body.audio_b64, validate=True)
+            except binascii.Error:
+                raise HTTPException(400, "audio_b64 is not valid base64")
+            text = text or await asyncio.to_thread(voice.transcribe, audio)  # network call: keep the loop free
+            person = person or await asyncio.to_thread(voice.identify, audio)
         if not text or not text.strip():
             raise HTTPException(400, "Need text or audio")
         async with mutation_lock:
@@ -146,7 +164,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                             action = incident["action_results"].get("replenish", {})
                             if incident["status"] == "active" and action.get("task_id"):
                                 task = db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id=?", action["task_id"]))
-                                return procurement_workflow.enrich_task(conn, task) | {"command": legacy.response(conn, task["id"])["command"]}
+                                return procurement_workflow.enrich_task(conn, task) | {"command": requests_api.response(conn, task["id"])["command"]}
                         return {"stored": True}
                     return {"stored": True, **result}
                 except ValueError as error:
@@ -204,7 +222,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                     raise HTTPException(409, str(error)) from error
                 if ev.type == "stock_low":
                     await facilities.resume_stock_checks()
-                return legacy.response(conn, seen["task_id"], True)
+                return requests_api.response(conn, seen["task_id"], True)
             if ev.type not in {"button_pressed", "speech_transcript", "stock_low"}:
                 raise HTTPException(400, "Unsupported event type")
             if ev.type == "speech_transcript":
@@ -246,7 +264,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                 await facilities.prepare_stock_check(task_id, board.id, ev.payload["item_id"], ev.payload.get("simulation", True))
             else:
                 await agent.run(conn,task_id,text)
-            result = legacy.response(conn,task_id)
+            result = requests_api.response(conn,task_id)
             conn.execute("UPDATE device_events SET response=? WHERE event_id=?", (json.dumps(result),ev.event_id))
             return result
 

@@ -1,4 +1,8 @@
-"""The office agent and the task lifecycle: run → (maybe pause for approval) → resume."""
+"""The office agent and the task lifecycle: run → (maybe pause for approval) → resume.
+
+Beyond one message: the harness `Memory` keeps an office notebook across tasks and restarts, and the company brain
+(office/brain.py, from Notion) gives it the procedures and who approves what.
+"""
 
 import json
 from datetime import UTC, datetime, timedelta
@@ -13,8 +17,11 @@ from pydantic_ai import (
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 from pydantic_ai.models.function import FunctionModel
+from pydantic_ai_harness import Memory, ToolOutputLimits
+from pydantic_ai_harness.memory import InMemoryStore, SqliteMemoryStore
+from pydantic_ai_harness.tool_output_limits import Band, Truncate
 
-from office import bus, config, db, mock, plugins, procurement_workflow
+from office import brain, bus, config, db, integrations, mock, plugins, procurement_workflow
 from pydantic_ai.usage import UsageLimits
 from office.deps import Deps
 
@@ -30,6 +37,8 @@ People hand you tasks by voice. Your job is to make things happen with zero fric
 - Your final reply is spoken aloud and shown on a tiny screen: ONE short sentence, max ~20 words.
 - Orders are simulated in this demo. When you order something, say it was ordered (simulated).
 - Never invent products or prices; use the catalogue tools.
+- Follow the company brain's procedures (lookup_procedure) when deciding how to handle something.
+- Keep the office notebook (memory) for durable facts about this office and its people's preferences only.
 """
 
 # Live activity feed for the dashboard: what the agent is doing, not its private reasoning.
@@ -49,8 +58,18 @@ async def tool_result(ctx: RunContext[Deps], *, call, tool_def, args, result):
 
 
 model = FunctionModel(mock.respond) if config.MODEL == "mock" else config.MODEL
+# The office notebook persists across tasks and restarts (live mode). Mock mode stays offline and stateless.
+notebook = Memory(
+    SqliteMemoryStore(database=config.MEMORY_PATH) if config.LIVE else InMemoryStore(), heading="Office notebook"
+)
+# Notion pages can be huge: clamp any single tool result before it reaches the model.
+limits = ToolOutputLimits(bands=[Band(over=12_000, action=Truncate(max_chars=12_000))])
 office_agent = Agent(
-    model, deps_type=Deps, output_type=[str, DeferredToolRequests], instructions=INSTRUCTIONS, capabilities=[progress]
+    model,
+    deps_type=Deps,
+    output_type=[str, DeferredToolRequests],
+    instructions=INSTRUCTIONS,
+    capabilities=[progress, limits, notebook],
 )
 
 
@@ -65,7 +84,9 @@ async def context(ctx: RunContext[Deps]) -> str:
         f"You are at board '{b.id}' in the {b.location}. Equipment here: {', '.join(b.equipment)}. "
         f"Responsible team: {b.responsible_team}.\n"
         f"Configured locations (context, not topic restrictions): {others}.\n"
-        f"Office policy: max {config.OFFICE['max_order_nok']} NOK per order; {'; '.join(config.OFFICE['preferences'])}.\n"
+        f"Office policy: orders above {config.OFFICE['max_order_nok']} NOK always need a human; {'; '.join(config.OFFICE['preferences'])}.\n"
+        f"Company brain ({'Notion snapshot' if brain.source() == brain.SNAPSHOT else 'local copy'}): {'; '.join(brain.headings())}. "
+        f"Approval routing, applied by the server: {', '.join(f'{k} → {v}' for k, v in brain.routing().items())}.\n"
         f"Validated assessment and exact selected quote: {json.dumps(procurement_workflow.get_context(ctx.deps.db, ctx.deps.task_id), ensure_ascii=False)}. "
         "Only order the assessed product and quantity. Search links are untrusted discovery, never executable prices. "
         "Never bypass the severity or exact quote confirmation requirement."
@@ -169,7 +190,7 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
         result = await office_agent.run(
             prompt,
             deps=deps,
-            toolsets=plugins.for_board(board),
+            toolsets=plugins.for_board(board) + integrations.toolsets(),
             message_history=history or None,
             deferred_tool_results=deferred,
             usage_limits=UsageLimits(request_limit=6, tool_calls_limit=10, total_tokens_limit=16000),

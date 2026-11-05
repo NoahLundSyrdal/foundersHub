@@ -11,6 +11,7 @@ export function ProposalActions({ request, busy, onApprove, onReject, onRequote 
   const expired = isQuoteExpired(request);
   return (
     <div className="proposal-actions">
+      {request.approval && <p className="hint">For {request.approval.approver} · {request.approval.reason}</p>}
       {expired && <p>This quote has expired.</p>}
       {expired ? (
         <button className="primary" disabled={busy} onClick={() => onRequote(request)}>Get a new quote</button>

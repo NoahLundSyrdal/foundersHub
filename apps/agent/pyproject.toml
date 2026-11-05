@@ -9,6 +9,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "python-dotenv>=1.0",
     "office-procurement",
+    "pydantic-ai-harness[notion]>=0.66.0",
 ]
 
 [project.optional-dependencies]
