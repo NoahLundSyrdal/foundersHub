@@ -1,0 +1,1 @@
+{"id":"mw3oloot98b50bae","member":"noah-lund-syrdal-b43119","lamport":133,"ts":1793891365950,"type":"upsert","kind":"task","key":"try-procurement-live","data":{"title":"Run coffee request through Leo input and simulated order in live app","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["package.json","apps/agent","local dev runtime"]},"source":"explicit"}
