@@ -8,7 +8,7 @@ import {
 } from "@office/contracts";
 import { AgentStage } from "./AgentStage";
 import { api } from "./api";
-import { money, stamp } from "./format";
+import { isMerged, money, requestTitle, stamp } from "./format";
 import { HistoryView } from "./HistoryView";
 
 type Health = {
@@ -54,25 +54,45 @@ export function App() {
     [connectionError, setConnectionError] = useState(""),
     [listening, setListening] = useState(false),
     [streamConnected, setStreamConnected] = useState(false),
-    [view, setView] = useState<"desk" | "history">("desk");
+    [view, setView] = useState<"desk" | "history">("desk"),
+    [followed, setFollowed] = useState<string | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const refreshSequence = useRef(0);
-  const followed = useRef("");
   const active = requests.find((request) => request.id === selected);
   const open = requests.filter(
     (r) => !["ordered", "resolved"].includes(r.status),
   );
-  // Follow new requests, including ones from the hardware, unless someone is typing.
-  const newestOpen = open.reduce<OfficeRequest | undefined>(
-    (newest, r) => (!newest || r.created_at > newest.created_at ? r : newest),
-    undefined,
-  );
+  const newestOf = (list: OfficeRequest[]) =>
+    list.reduce<OfficeRequest | undefined>(
+      (newest, r) => (!newest || r.created_at > newest.created_at ? r : newest),
+      undefined,
+    );
+  const newest = newestOf(requests.filter((r) => !isMerged(r)));
+  // Hold the screen while someone is working on a request, so a new one can
+  // never swap the approval or the form under their hands.
+  const holding =
+    listening || !!text.trim() || (!!active && open.includes(active));
+  const unseen =
+    followed !== null && newest && newest.created_at > followed
+      ? newest
+      : undefined;
+  const waitingToOpen = unseen?.id === selected ? undefined : unseen;
   useEffect(() => {
-    if (newestOpen && newestOpen.created_at > followed.current) {
-      followed.current = newestOpen.created_at;
-      if (!text.trim()) setSelected(newestOpen.id);
+    if (!health) return;
+    if (followed === null) {
+      setFollowed(newest?.created_at ?? "");
+      setSelected(newestOf(open)?.id ?? null);
+    } else if (unseen && (unseen.id === selected || !holding)) {
+      setFollowed(unseen.created_at);
+      setSelected(unseen.id);
     }
-  }, [newestOpen, text]);
+  });
+  function openRequest(id: string) {
+    setSelected(id);
+    setText("");
+    setNotice("");
+    setView("desk");
+  }
   const SpeechRecognition =
     (
       window as unknown as {
@@ -246,15 +266,34 @@ export function App() {
             {notice}
           </div>
         )}
+        {waitingToOpen && (
+          <div role="status" className="new-request">
+            <span>
+              New request from{" "}
+              {stations.find((s) => s.id === waitingToOpen.station_id)?.name ??
+                waitingToOpen.station_id}
+              : {requestTitle(waitingToOpen)}
+            </span>
+            <button
+              className="secondary"
+              disabled={busy || listening}
+              onClick={() => openRequest(waitingToOpen.id)}
+            >
+              Open
+            </button>
+          </div>
+        )}
         <nav className="views" aria-label="Views">
           <button
             aria-pressed={view === "desk"}
+            disabled={listening}
             onClick={() => setView("desk")}
           >
             Desk
           </button>
           <button
             aria-pressed={view === "history"}
+            disabled={listening}
             onClick={() => setView("history")}
           >
             History
@@ -265,12 +304,8 @@ export function App() {
             requests={requests}
             stations={stations}
             statusLabels={statusLabels}
-            onOpen={(id) => {
-              setSelected(id);
-              setText("");
-              setNotice("");
-              setView("desk");
-            }}
+            disabled={busy || listening}
+            onOpen={openRequest}
           />
         ) : (
           <>
@@ -304,7 +339,7 @@ export function App() {
             {active && (
               <section className="request" aria-label="Request details">
                 <div className="section-head">
-                  <h2>{active.summary || "New request"}</h2>
+                  <h2>{requestTitle(active)}</h2>
                   <span>
                     {statusLabels[active.status] ?? active.status}
                   </span>
@@ -504,15 +539,11 @@ export function App() {
                       className={`row ${selected === request.id ? "active" : ""}`}
                       aria-pressed={selected === request.id}
                       disabled={busy || listening}
-                      onClick={() => {
-                        setSelected(request.id);
-                        setText("");
-                        setNotice("");
-                      }}
+                      onClick={() => openRequest(request.id)}
                     >
                       <i className={`dot dot-${request.status}`} aria-hidden="true" />
                       <span className="row-main">
-                        <strong>{request.summary || "New request"}</strong>
+                        <strong>{requestTitle(request)}</strong>
                         <small>
                           {stations.find((s) => s.id === request.station_id)?.name ??
                             request.station_id}{" "}

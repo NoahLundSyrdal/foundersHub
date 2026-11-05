@@ -25,6 +25,14 @@ const homes: Record<Mood, number> = {
   failed: 30,
 };
 
+const itemLines: Record<string, string> = {
+  coffee: "Coffee? Top priority.",
+  cups: "Can’t have coffee without cups.",
+  "toilet-paper": "I’m on a roll.",
+  soap: "Let’s keep it squeaky.",
+  "printer-paper": "Feeding the printer.",
+  toner: "Feeding the printer.",
+};
 const propFor = (request?: OfficeRequest): Prop => {
   if (request?.intent === "maintenance") return "wrench";
   switch (request?.item_id) {
@@ -59,18 +67,13 @@ function personality(request?: OfficeRequest): { tone: Tone; line?: string } {
     return { tone: "cool", line: "Got you, bro." };
   if (/\b(please|thanks|thank you|takk)\b|vær så snill/.test(lower))
     return { tone: "polite", line: "You said the nice word!" };
-  const topic: Record<string, string> = {
-    mug: "Coffee? Top priority.",
-    roll: "I’m on a roll.",
-    soap: "Let’s keep it squeaky.",
-    paper: "Feeding the printer.",
-    wrench: "Oh no, poor thing.",
-  };
-  const prop = propFor(request);
-  if (prop) return { tone: "plain", line: topic[prop] };
+  if (request?.intent === "maintenance")
+    return { tone: "plain", line: "Oh no, poor thing." };
+  if (request?.intent === "clarification")
+    return { tone: "plain", line: "Hmm. Say that again?" };
   return {
     tone: "plain",
-    line: request?.intent === "clarification" ? "Hmm. Say that again?" : undefined,
+    line: request?.item_id ? itemLines[request.item_id] : undefined,
   };
 }
 
@@ -140,11 +143,10 @@ export function Avatar({
   }, [mood]);
 
   // Say something about new words, and otherwise about a change of mood.
-  const spoken = `${request?.id}:${request?.original_text}`;
+  const spoken = `${request?.id}:${request?.original_text}:${request?.intent}:${request?.item_id}`;
   useEffect(() => {
     if (line) speak(line);
-    else if (request?.intent === null) speak("I’m all ears.");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    else if (request?.status === "awaiting_input") speak("I’m all ears.");
   }, [spoken]);
   useEffect(() => {
     const moodLine = moodLines[mood];
@@ -188,7 +190,7 @@ export function Avatar({
           </span>
         )}
         <button
-          className={`avatar face-${asleep ? "asleep" : mood}`}
+          className="avatar"
           aria-label="Poke the assistant"
           onClick={() => {
             setHop((value) => value + 1);

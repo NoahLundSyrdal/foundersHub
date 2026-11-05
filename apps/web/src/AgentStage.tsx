@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { OfficeRequest } from "@office/contracts";
 import { Avatar, type Mood } from "./Avatar";
-import { money, stamp } from "./format";
+import { isMerged, money, stamp } from "./format";
 
 const PACE_MS = 500;
 const FRESH_MS = 5000;
@@ -21,6 +21,7 @@ const workingCaptions = [
 
 // Where the request really is. Only the server state decides this.
 function position(request: OfficeRequest): { step: number; mood: Mood } {
+  if (isMerged(request)) return { step: 2, mood: "idle" };
   switch (request.status) {
     case "awaiting_input":
       return { step: 0, mood: "waiting" };
@@ -39,6 +40,11 @@ function position(request: OfficeRequest): { step: number; mood: Mood } {
 }
 
 function caption(request: OfficeRequest): { title: string; note?: string } {
+  if (isMerged(request))
+    return {
+      title: "Merged with an earlier request.",
+      note: "No new order was made.",
+    };
   switch (request.status) {
     case "awaiting_input":
       return { title: "I’m listening. What do you need?" };
@@ -78,21 +84,23 @@ function caption(request: OfficeRequest): { title: string; note?: string } {
 // The mock agent finishes in milliseconds, so finished steps are revealed one
 // at a time to stay readable. This only delays the display, never the state.
 function usePaced(target: number, key: string | undefined, fresh: boolean) {
-  const [value, setValue] = useState(target);
-  const lastKey = useRef(key);
+  const [paced, setPaced] = useState({ key, value: target });
+  // Adjust during render so a new request never shows the previous one's count.
+  let { value } = paced;
+  if (paced.key !== key) {
+    value = fresh ? 0 : target;
+    setPaced({ key, value });
+  }
   useEffect(() => {
-    let current = value;
-    if (lastKey.current !== key) {
-      lastKey.current = key;
-      current = fresh ? 0 : target;
-      setValue(current);
-    }
-    if (current > target) setValue(target);
-    if (current < target) {
-      const timer = setTimeout(() => setValue(current + 1), PACE_MS);
+    if (value > target) setPaced({ key, value: target });
+    if (value < target) {
+      const timer = setTimeout(
+        () => setPaced({ key, value: value + 1 }),
+        PACE_MS,
+      );
       return () => clearTimeout(timer);
     }
-  }, [target, key, fresh, value]);
+  }, [target, key, value]);
   return Math.min(value, target);
 }
 
@@ -136,7 +144,7 @@ export function AgentStage({
           note: "Press a station when something runs out or breaks.",
         }
       : catchingUp && step < workingCaptions.length
-        ? { title: workingCaptions[Math.max(step, 0)] }
+        ? { title: workingCaptions[step] }
         : caption(request);
   return (
     <section className={`stage field-${base}`} aria-label="Agent status">

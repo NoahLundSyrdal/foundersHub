@@ -1,5 +1,5 @@
 import type { OfficeRequest, Station } from "@office/contracts";
-import { money, stamp } from "./format";
+import { isMerged, money, requestTitle, stamp } from "./format";
 
 const dayLabel = (value: string) => {
   const date = new Date(value);
@@ -16,11 +16,13 @@ export function HistoryView({
   requests,
   stations,
   statusLabels,
+  disabled,
   onOpen,
 }: {
   requests: OfficeRequest[];
   stations: Station[];
   statusLabels: Record<string, string>;
+  disabled: boolean;
   onOpen: (id: string) => void;
 }) {
   // A pressed button with nothing said yet has no history to show.
@@ -48,13 +50,14 @@ export function HistoryView({
             <button
               className="history-row"
               key={r.id}
+              disabled={disabled}
               onClick={() => onOpen(r.id)}
             >
               <time dateTime={r.created_at}>{stamp(r.created_at)}</time>
               <i className={`dot dot-${r.status}`} aria-hidden="true" />
               <span className="history-main">
                 <strong>
-                  {r.original_text ? `“${r.original_text}”` : r.summary}
+                  {r.original_text ? `“${r.original_text}”` : requestTitle(r)}
                 </strong>
                 <small>
                   {stations.find((s) => s.id === r.station_id)?.name ??
@@ -63,7 +66,7 @@ export function HistoryView({
                   {r.proposal
                     ? `${r.proposal.product.name}, ${money(r.proposal.total_nok)} · `
                     : ""}
-                  {statusLabels[r.status] ?? r.status}
+                  {isMerged(r) ? requestTitle(r) : (statusLabels[r.status] ?? r.status)}
                 </small>
               </span>
             </button>

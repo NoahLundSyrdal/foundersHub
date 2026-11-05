@@ -801,8 +801,7 @@ dl .total dd {
 .request > .alert {
   margin-top: 14px;
 }
-.work > .alert + section,
-.work > .alert + .alert {
+.work > .alert + * {
   margin-top: -20px;
 }
 footer {
@@ -980,6 +979,9 @@ footer {
     grid-row: span 2;
     margin: 0;
   }
+  .bubble {
+    max-width: min(170px, 44vw);
+  }
   .stage-steps {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
@@ -1013,6 +1015,23 @@ footer {
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.new-request {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 10px 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--waiting);
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+.new-request .secondary {
+  flex: none;
+  min-height: 36px;
 }
 
 /* Views and history */
