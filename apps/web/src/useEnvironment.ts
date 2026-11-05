@@ -23,13 +23,17 @@ export function useEnvironment(hidden: boolean): EnvironmentState {
         if (active) setState((previous) => ({ ...previous, now: Date.now() + clockOffset, unavailable: true }));
       } finally { pending = false; }
     };
+    const stream = new EventSource("/api/events");
+    stream.addEventListener("facility.updated", refresh);
+    stream.addEventListener("state.changed", refresh);
+    stream.onopen = refresh;
     void refresh();
     const poll = setInterval(() => {
       // Expire readings even while a network request is hanging.
       setState((previous) => ({ ...previous, now: Date.now() + clockOffset }));
       void refresh();
     }, 5000);
-    return () => { active = false; clearInterval(poll); };
+    return () => { active = false; clearInterval(poll); stream.close(); };
   }, [hidden]);
   return state;
 }

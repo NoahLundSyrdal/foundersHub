@@ -8,6 +8,7 @@ import { createTwinDevice, loadTwinDevices, saveTwinDevices, type TwinDevice } f
 import { createDeviceMesh, disposeDeviceMeshes, isOfficeFloor } from "./twinDeviceScene";
 import { isLow, reading, stationRequests, TwinInspector, type TwinSelection } from "./TwinInspector";
 import { reportMarkers, roomAt, thingById, thingForRequest, thingsAt, type StationId } from "./twinThings";
+import { environmentReadings } from "./environmentTelemetry";
 import { useEnvironment } from "./useEnvironment";
 import "./office-twin.css";
 
@@ -458,7 +459,7 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
           <div className="twin-fallback" role="status">{renderError}</div>
         ) : (
           <div className="twin-pins">
-            {ids.map((id) => {
+            {ids.filter((id) => requests.some((r) => r.station_id === id && ["maintenance_open", "awaiting_approval", "ordered", "checkout_ready", "failed"].includes(r.status) && !thingForRequest(r)?.id.match(/^(event-hall|workspace|cafe|cloakroom)$/))).map((id) => {
               const status = statuses[id];
               const name = stations.find((station) => station.id === id)?.name ?? id;
               return (
@@ -491,7 +492,7 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
                 <span>{thing.name}<small>{reports.length} {reports.length === 1 ? "report" : "reports"} · {statusLabels[status]}</small></span>
               </button>;
             })}
-            {devices.filter((device) => device.kind === "level").map((device) => {
+            {devices.map((device) => {
               const selected = selection?.type === "device" && selection.id === device.id;
               return (
                 <button
@@ -499,10 +500,10 @@ export function OfficeTwin({ hidden, stations, requests, offline, disabled, onSi
                   ref={(element) => { deviceElements.current[device.id] = element; }}
                   className={`twin-pin twin-pin-device ${selected ? "selected" : ""} ${isLow(device) ? "low" : ""}`}
                   aria-pressed={selected}
-                  aria-label={`${device.name}: ${reading(device)}, simulated`}
+                  aria-label={device.kind === "button" ? `${device.name}: environment readings` : `${device.name}: ${reading(device)}, simulated`}
                   onClick={() => select({ type: "device", id: device.id })}
                 >
-                  {reading(device)}
+                  {device.kind === "button" ? <span>{device.name}<small>{environmentReadings(environment.snapshot?.readings ?? [], device.stationId, environment.now).map((m) => m.reading ? `${m.reading.value} ${m.unit}${m.stale ? " (stale)" : m.reading.simulation ? " (simulated)" : ""}` : `${m.label}: —`).join(" · ")}</small></span> : reading(device)}
                 </button>
               );
             })}

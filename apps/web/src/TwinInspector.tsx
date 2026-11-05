@@ -177,7 +177,7 @@ function Details(props: Props & { thing?: TwinThing; device?: TwinDevice; statio
           <meter min={device.tracking.min} max={device.tracking.max} value={device.tracking.value} aria-label={`${device.tracking.label}, simulated`} />
         </div>
       )}
-      {device?.kind === "level" && <EnvironmentReadings boardId={device.stationId} location={station?.name ?? device.stationId} state={props.environment} />}
+      {device && <EnvironmentReadings boardId={device.stationId} location={station?.name ?? device.stationId} state={props.environment} />}
       {station || thing ? (
         <section aria-label="Reports">
           {related.length === 0 ? (

@@ -88,7 +88,7 @@ export default function WorkQueue({ onOpenRequest }: { onOpenRequest?: (id: stri
       return false;
     } finally { if (mounted.current) setBusy(false); }
   };
-  const active = items.find((item) => item.id === selected);
+
   const visible = items.filter((item) => {
     if (filter === "Waiting") return item.status === "waiting" || item.status === "awaiting_approval";
     if (filter === "Blocked") return item.status === "blocked";
@@ -97,18 +97,19 @@ export default function WorkQueue({ onOpenRequest }: { onOpenRequest?: (id: stri
     if (filter === "Overdue") return !terminal.has(item.status) && [item.due_at, item.next_review_at].some((at) => at && Date.parse(at) <= now);
     return !terminal.has(item.status);
   });
+  const active = visible.find((item) => item.id === selected) ?? visible[0];
   const inbox = notifications.filter((notification) => !notification.acknowledged_at);
 
   return <section className="work-queue" aria-label="Work and follow-up">
     <div className="wq-heading">
-      <div><h2>Work and follow-up</h2><p>Track the outcome, the next step and the evidence.</p></div>
+      <div><h2>Work</h2><p>Open cases and their next steps.</p></div>
       <button className="secondary" onClick={() => setShowCreate((open) => !open)} disabled={busy} aria-expanded={showCreate}>{showCreate ? "Hide form" : "New work"}</button>
     </div>
     {error && <div className="alert error" role="alert">{error}</div>}
     {loadError && <div className="alert error" role="alert">{loadError}</div>}
     {showCreate && <CreateWork templates={templates} busy={busy} onCreate={(body) => void mutate("/work", body)} />}
     <Routines routines={routines} templates={templates} busy={busy} mutate={mutate} />
-    {inbox.length > 0 && <details className="wq-inbox" open>
+    {inbox.length > 0 && <details className="wq-inbox">
       <summary>Follow-up inbox ({inbox.length}) · local only</summary>
       {inbox.map((notice) => <div className="wq-notice" key={notice.id}>
         <div><strong>{label(notice.kind)} · {notice.target}</strong><p>{notice.detail}</p><small>{stamp(notice.created_at)} · No external message sent</small></div>
@@ -204,15 +205,16 @@ function WorkDetail({ work, busy, mutate, onOpenRequest }: { work: WorkItem; bus
   return <article className="wq-detail" aria-label="Work details">
     <div className="wq-detail-title"><span className={`wq-status wq-${work.status}`}>{label(work.status)}</span><span>{work.simulation ? "Simulated execution" : "Human coordination"}</span></div>
     <h3>{work.title}</h3><p className="wq-outcome">{work.outcome}</p>
-    <dl className="wq-facts"><div><dt>Owner</dt><dd>{work.owner}</dd></div><div><dt>Priority</dt><dd>{work.priority}</dd></div><div><dt>Deadline</dt><dd>{stamp(work.due_at)}</dd></div><div><dt>Next review</dt><dd>{stamp(work.next_review_at)}</dd></div><div><dt>Escalation owner</dt><dd>{work.escalation_owner}</dd></div>{Object.entries(work.context).map(([key, value]) => <div key={key}><dt>{label(key)}</dt><dd>{value}</dd></div>)}</dl>
+    <details><summary>Case details</summary><dl className="wq-facts"><div><dt>Owner</dt><dd>{work.owner}</dd></div><div><dt>Priority</dt><dd>{work.priority}</dd></div><div><dt>Deadline</dt><dd>{stamp(work.due_at)}</dd></div><div><dt>Next review</dt><dd>{stamp(work.next_review_at)}</dd></div><div><dt>Escalation owner</dt><dd>{work.escalation_owner}</dd></div>{Object.entries(work.context).map(([key, value]) => <div key={key}><dt>{label(key)}</dt><dd>{value}</dd></div>)}</dl></details>
     {work.waiting_reason && <p className="wq-waiting">{work.waiting_reason}</p>}
-    {work.links.task_id && <div className="wq-linked"><p>Linked request: <code>{work.links.task_id}</code>. Purchase approval and execution use the existing request controls.</p>{onOpenRequest ? <button className="secondary" onClick={() => onOpenRequest(work.links.task_id!)}>Open linked request</button> : <a href={`?request=${encodeURIComponent(work.links.task_id)}`}>Open linked request</a>}</div>}
+    {work.links.task_id && <div className="wq-linked"><p>Linked request: <code>{work.links.task_id}</code>. Purchase approval and execution use the existing request controls.</p>{onOpenRequest ? <button className="secondary" onClick={() => onOpenRequest(work.links.task_id!)}>Open ticket & order</button> : <a href={`?request=${encodeURIComponent(work.links.task_id)}`}>Open ticket & order</a>}</div>}
     {!finished && <details className="wq-manage"><summary>Ownership and waiting</summary>
       <form className="wq-form" onSubmit={(e) => { e.preventDefault(); act("assign", { owner: owner.trim() }); }}><label>Accountable owner<input value={owner} onChange={(e) => setOwner(e.target.value)} maxLength={128} required disabled={busy} /></label><button className="secondary" disabled={busy || !owner.trim() || owner.trim() === work.owner}>Assign owner</button></form>
       <div className="wq-form"><label>Reason<textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} disabled={busy} /></label><label>Next review<input type="datetime-local" value={review} onChange={(e) => setReview(e.target.value)} disabled={busy} /></label><div className="wq-actions"><button className="secondary" disabled={busy || !reason.trim() || !review} onClick={() => act("wait", { reason: reason.trim(), next_review_at: new Date(review).toISOString() })}>Wait for response</button><button className="secondary" disabled={busy || !reason.trim() || !review} onClick={() => act("block", { reason: reason.trim(), next_review_at: new Date(review).toISOString() })}>Mark blocked</button>{["waiting", "blocked"].includes(work.status) && <button className="secondary" disabled={busy} onClick={() => act("resume")}>Resume</button>}</div></div>
     </details>}
-    <h4>Steps</h4>
-    <ol className="wq-steps">{work.steps.map((step) => <StepCard key={step.id} work={work} step={step} busy={busy || finished} mutate={mutate} />)}</ol>
+    <h4>Next step</h4>
+    <ol className="wq-steps">{work.steps.filter((step) => step.id === work.steps.find((candidate) => candidate.status !== "completed")?.id).map((step) => <StepCard key={step.id} work={work} step={step} busy={busy || finished} mutate={mutate} />)}</ol>
+    <details><summary>All steps ({work.steps.length})</summary><ol className="wq-steps">{work.steps.map((step) => <StepCard key={step.id} work={work} step={step} busy={busy || finished} mutate={mutate} />)}</ol></details>
     <details className="wq-history"><summary>History ({work.history.length})</summary><ol>{work.history.map((entry, index) => <li key={`${entry.at}-${index}`}><time dateTime={entry.at}>{stamp(entry.at)}</time><strong>{label(entry.action)}</strong><span>{entry.detail}</span></li>)}</ol></details>
     {!finished && <div className="wq-close"><p>Close only after every required step and its completion evidence are confirmed.</p><div className="wq-actions"><button className="primary" disabled={busy || !work.steps.every((step) => step.status === "completed")} onClick={() => act("close")}>Verify and close work</button><button className="text-button" disabled={busy || !reason.trim()} onClick={() => act("cancel", { reason: reason.trim() })}>Cancel with reason</button></div></div>}
   </article>;

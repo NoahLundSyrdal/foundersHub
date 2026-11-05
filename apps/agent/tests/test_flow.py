@@ -81,7 +81,7 @@ def test_sensor_fires_once_on_threshold_crossing(api):
 def test_plugins_follow_board_modules():
     kitchen = plugins.for_board(config.BOARDS["kitchen"])  # has temperature_humidity
     printer = plugins.for_board(config.BOARDS["printer"])
-    assert plugins.sensors.toolset in kitchen and plugins.sensors.toolset not in printer
+    assert plugins.sensors.toolset in kitchen and plugins.sensors.toolset in printer
 
 
 def test_stock_low_device_event_proposes_one_unit(api):
