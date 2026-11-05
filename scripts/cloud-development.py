@@ -30,6 +30,7 @@ PROTECTED_FILES = frozenset({
         "dispatch.py", "integrations.py", "team_gateway.py", "connect.py", "whatsapp_delivery.py",
         "order_confirmations.py", "oda_api.py", "oda_food.py", "procurement_workflow.py",
         "requests_api.py", "work_api.py", "work_bridge.py", "work_service.py", "plugins/procurement.py",
+        "approval_email.py", "speaker.py", "voice.py", "chat_api.py",
     )),
     *("apps/procurement/office_procurement/" + name for name in (
         "config.py", "oda.py", "planning.py", "serialization.py",
