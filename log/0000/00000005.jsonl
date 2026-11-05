@@ -1,0 +1,1 @@
+{"id":"mw3mex4d9db2be1d","member":"anders03-vestrum-0b12cc","lamport":5,"ts":1793887691053,"type":"upsert","kind":"note","key":"device-status","data":{"text":"Atech board (ESP32-S3) is plugged into Anders' laptop and streaming: distance, IMU, temp/humidity modules attached. `atech` CLI and pyserial are NOT installed on that laptop yet.","areas":["hardware"]},"source":"explicit"}
