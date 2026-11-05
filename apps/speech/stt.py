@@ -222,10 +222,10 @@ NORWEGIAN_HINTS = (" er ", " det ", " hvor", " luft", " varmt", " kaldt", " vi "
 
 def answer_language(text: str, detected: str | None) -> str:
     """'no' or 'en' for the reply: the STT's detected language, else a word heuristic."""
-    if detected in ("no", "en"):
-        return detected
     t = f" {text.lower()} "
-    return "no" if any(h in t for h in NORWEGIAN_HINTS) else "en"
+    if any(h in t for h in NORWEGIAN_HINTS) or any(c in t for c in "æøå"):
+        return "no"  # the words win: STT language detection sometimes labels Norwegian as English
+    return detected if detected in ("no", "en") else "en"
 
 
 def air_summary(aq: dict, lang: str = "en") -> str:
