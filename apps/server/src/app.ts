@@ -22,6 +22,7 @@ import {
   type Interpreter,
 } from "./agent/interpret.js";
 import { mockSupplier, type Supplier } from "./integrations/supplier.js";
+import { registerEnvironment } from "./environment/air.js";
 class HttpError extends Error {
   constructor(
     public statusCode: number,
@@ -229,6 +230,7 @@ export function buildApp(
       streams.delete(raw);
     });
   });
+  registerEnvironment(app);
   app.get("/api/health", () => ({
     ok: true,
     agent_provider: provider,

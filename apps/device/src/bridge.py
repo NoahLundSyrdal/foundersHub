@@ -87,6 +87,32 @@ def normalize_message(message: dict, mapping: dict[str, str] | None = None) -> d
     return make_event(station, "stock_low", value)
 
 
+TELEMETRY_KEYS = ("th_temperature", "th_humidity")  # plus any key containing "co2"
+_last_telemetry: dict[str, float] = {}
+
+
+def forward_telemetry(base_url: str, message: dict, interval: float = 5.0) -> bool:
+    """Forward climate readings (throttled per key) for GET /api/air-quality. Best effort."""
+    payload = message.get("payload") if message.get("type") == "event" else message
+    if not isinstance(payload, dict) or payload.get("event_type") != "sensor":
+        return False
+    key, value = str(payload.get("key", "")), payload.get("value")
+    if (key not in TELEMETRY_KEYS and "co2" not in key.lower()) or type(value) not in (int, float):
+        return False
+    now = time.monotonic()
+    if now - _last_telemetry.get(key, -1e9) < interval:
+        return False
+    _last_telemetry[key] = now
+    try:
+        request = Request(base_url.rstrip("/") + "/api/telemetry", method="POST",
+                          data=json.dumps({"key": key, "value": value}).encode("utf-8"),
+                          headers={"Content-Type": "application/json"})
+        urlopen(request, timeout=2).close()
+        return True
+    except (HTTPError, URLError, TimeoutError, ConnectionError):
+        return False
+
+
 def post_event(base_url: str, event: dict, retries: int = 2) -> dict:
     """Retry transient failures with the same event ID and exact request body."""
     body = json.dumps(validate_event(event)).encode("utf-8")
@@ -210,7 +236,9 @@ def main() -> int:
                     print("Ignored incomplete or overlong serial line", file=sys.stderr)
                     continue
                 try:
-                    event = normalize_message(json.loads(raw), mapping)
+                    message = json.loads(raw)
+                    forward_telemetry(args.api, message)
+                    event = normalize_message(message, mapping)
                     if event is None:
                         continue
                     result = post_event(args.api, event)

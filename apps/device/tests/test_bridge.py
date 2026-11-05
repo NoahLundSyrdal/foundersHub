@@ -87,5 +87,16 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(bridge.feedback_action({"command":command}), {"action":"office_feedback", "value":command})
 
 
+    def test_forward_telemetry_filters_and_throttles(self):
+        bridge._last_telemetry.clear()
+        temp = {"type":"event","payload":{"event_type":"sensor","key":"th_temperature","value":24.7,"unit":"C"}}
+        tilt = {"type":"event","payload":{"event_type":"sensor","key":"imu_tilt","value":0.0}}
+        with patch.object(bridge, "urlopen") as opened:
+            self.assertTrue(bridge.forward_telemetry("http://api", temp))
+            self.assertFalse(bridge.forward_telemetry("http://api", temp))  # throttled
+            self.assertFalse(bridge.forward_telemetry("http://api", tilt))  # not climate
+            self.assertEqual(opened.call_count, 1)
+            self.assertEqual(json.loads(opened.call_args[0][0].data), {"key":"th_temperature","value":24.7})
+
 if __name__ == '__main__':
     unittest.main()
