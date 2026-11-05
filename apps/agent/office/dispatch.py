@@ -2,7 +2,7 @@
 import json
 from types import SimpleNamespace
 
-from office import bus, config, db, procurement_workflow as workflow
+from office import approval_email, bus, config, db, procurement_workflow as workflow, speaker
 from office.deps import Deps
 
 
@@ -12,6 +12,8 @@ def finish(conn, task_id, status, reply, pending=None, color=None):
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
     color = color or ("amber" if status == "awaiting_approval" else "red" if status == "failed" else "green")
     command = db.set_command(conn, task["board_id"], reply, color)
+    if status == "awaiting_approval":
+        approval_email.notify(conn, task_id)  # never raises or blocks; at most once per proposal
     result = workflow.enrich_task(conn, db.task_view(task))
     bus.publish("task.updated", result, source=conn)
     bus.publish("requests.updated", {"request_id": task_id}, source=conn)
@@ -26,7 +28,8 @@ async def execute_quote(conn, task_id, call_id, approved=False):
     value = workflow.get_context(conn, task_id)
     proposal = value["proposal"]
     ctx = SimpleNamespace(
-        deps=Deps(config.BOARDS[task["board_id"]], config.person(task["person"]), task_id, conn),
+        deps=Deps(config.BOARDS[task["board_id"]], (who := speaker.load(conn, task_id, task["person"])).person,
+                  task_id, conn, speaker=who),
         tool_call_id=call_id, tool_call_approved=approved,
     )
     reply = await place_order(ctx, proposal["product"]["id"], proposal["quantity"])
@@ -40,7 +43,7 @@ async def propose(conn, task_id):
     proposal = value["proposal"]
     call_id = f"prepared-order-{task_id}"
     if value["approval_required"]:
-        details = workflow.approval_metadata(value, task["person"])
+        details = workflow.approval_metadata(value, task["person"], speaker.load(conn, task_id, task["person"]))
         pending = [{"tool_call_id": call_id, "tool": "place_order",
                     "args": {"product_id": proposal["product"]["id"], "quantity": proposal["quantity"]},
                     "details": details}]

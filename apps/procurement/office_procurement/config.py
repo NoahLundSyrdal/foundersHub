@@ -41,7 +41,7 @@ class Policy(BaseModel):
 class Offer(BaseModel):
     id: str = Field(min_length=1, max_length=128)
     item_id: str = Field(min_length=1, max_length=128)
-    station_id: str
+    station_id: str = Field(min_length=1, max_length=128, pattern=r"\S")
     name: str = Field(min_length=1, max_length=200)
     supplier: str = Field(min_length=1, max_length=200)
     unit_price_nok: float = Field(gt=0, allow_inf_nan=False)
@@ -56,7 +56,7 @@ class Offer(BaseModel):
 
     @model_validator(mode="after")
     def simulation_only(self):
-        if self.station_id not in {"kitchen", "bathroom", "printer"} or self.fulfillment_kind not in {"goods", "service"} or self.source != "fixture" or self.simulation is not True:
+        if self.fulfillment_kind not in {"goods", "service"} or self.source != "fixture" or self.simulation is not True:
             raise ValueError("Only configured simulated offers are supported")
         return self
 
@@ -67,6 +67,8 @@ def configuration(overrides=None):
     stations = load("config/stations.json")
     products = load("fixtures/products.json")
     offers = [Offer.model_validate(o).model_dump() for o in load("fixtures/offers.json")]
+    if any(o["station_id"] not in {s["id"] for s in stations} for o in offers):
+        raise ValueError("Offers require a configured station")
     if len({o["id"] for o in offers}) != len(offers):
         raise ValueError("Offer IDs must be unique")
     return stations, products, offers, Policy.model_validate(office).model_dump()

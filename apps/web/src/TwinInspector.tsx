@@ -1,12 +1,14 @@
 import { useState, type ReactNode } from "react";
 import type { OfficeRequest, Station } from "@office/contracts";
 import { byUrgency, inLoop, isMerged, isTicket, loopLabel, mostUrgent, requestTitle, stamp, statusTone } from "./format";
+import { EnvironmentReadings, type EnvironmentState } from "./EnvironmentReadings";
 import { TwinDeviceSettings } from "./TwinDeviceSettings";
 import type { TwinDevice } from "./twinDevices";
 import { thingById, thingForRequest, type StationId, type TwinThing } from "./twinThings";
 
 export type TwinSelection = { type: "station" | "thing" | "device"; id: string } | null;
 type Props = {
+  environment: EnvironmentState;
   selection: TwinSelection;
   stations: Station[];
   requests: OfficeRequest[];
@@ -150,7 +152,7 @@ function Details(props: Props & { thing?: TwinThing; device?: TwinDevice; statio
   const { thing, device, station, title, requests, stations, offline, disabled, placing, onSelect, onAsk, onRequest } = props;
   const all = station ? stationRequests(requests, station.id) : [];
   // An object shows the reports about it; a station or a device shows the whole station.
-  const related = thing ? all.filter((r) => thingForRequest(r)?.id === thing.id) : all;
+  const related = thing ? requests.filter((r) => thingForRequest(r)?.id === thing.id) : all;
   const current = mostUrgent(related.filter(inLoop));
   const place = station ? (title === station.name ? station.responsible_team : `${station.name} · ${station.responsible_team}`) : "";
   return (
@@ -175,14 +177,15 @@ function Details(props: Props & { thing?: TwinThing; device?: TwinDevice; statio
           <meter min={device.tracking.min} max={device.tracking.max} value={device.tracking.value} aria-label={`${device.tracking.label}, simulated`} />
         </div>
       )}
-      {station ? (
+      {device && <EnvironmentReadings boardId={device.stationId} location={device.id === "stage-button" ? "Stage · shared board" : station?.name ?? device.stationId} state={props.environment} />}
+      {station || thing ? (
         <section aria-label="Reports">
           {related.length === 0 ? (
             <p className="empty">{offline ? "Reconnect to load reports." : "All clear. No reports."}</p>
           ) : (
-            <RequestRows requests={byUrgency(related).slice(0, 3)} onRequest={onRequest} />
+            <RequestRows requests={byUrgency(related)} onRequest={onRequest} />
           )}
-          <button className="text-button" onClick={() => onAsk(station.id)}>Report something here</button>
+          {station && <button className="text-button" onClick={() => onAsk(station.id)}>Report something here</button>}
         </section>
       ) : (
         <p className="empty">Not connected to the office system.</p>

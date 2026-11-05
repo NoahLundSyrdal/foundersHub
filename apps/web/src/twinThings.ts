@@ -45,10 +45,10 @@ export const twinThings: TwinThing[] = [
     stationId: "printer",
     supplies: ["printer-paper", "toner"],
   },
-  { id: "cloakroom", name: "Cloakroom", stationId: null, supplies: [] },
-  { id: "event-hall", name: "Event hall", stationId: null, supplies: [] },
-  { id: "workspace", name: "Worktables", stationId: null, supplies: [] },
-  { id: "cafe", name: "Café", stationId: null, supplies: [] },
+  { id: "cloakroom", name: "Cloakroom", stationId: null, supplies: [], mentions: /\bcloakroom\b|garderobe/i },
+  { id: "event-hall", name: "Event hall", stationId: null, supplies: [], mentions: /\bevent[ -]?hall\b|\bauditorium\b|arrangementssal/i },
+  { id: "workspace", name: "Worktables", stationId: null, supplies: [], mentions: /\bwork[ -]?tables?\b|\bworkspace\b|\bdesks?\b|arbeidsbord/i },
+  { id: "cafe", name: "Café", stationId: null, supplies: [], mentions: /\bcaf[eé]\b|kafé/i },
 ];
 
 /** Floors and walls belong to the room around them, so clicking anywhere in a room works. */
@@ -64,6 +64,11 @@ export function roomAt(x: number, z: number): string | null {
  * Objects are checked in list order, so the broad coffee machine pattern comes last.
  */
 export function thingForRequest(request: OfficeRequest): TwinThing | null {
+  // Explicit room references override the input device's location. Do not guess
+  // when a report names multiple rooms; it needs a more precise location.
+  const locationText = request.report_location_text || request.original_text;
+  const rooms = twinThings.filter((thing) => !thing.stationId && thing.mentions?.test(locationText));
+  if (rooms.length) return rooms.length === 1 ? rooms[0] : null;
   const candidates = twinThings.filter((thing) => thing.stationId === request.station_id);
   if (candidates.length === 1) return candidates[0];
   return (
@@ -74,3 +79,14 @@ export function thingForRequest(request: OfficeRequest): TwinThing | null {
 }
 export const thingById = (id: string) => twinThings.find((thing) => thing.id === id);
 export const thingsAt = (station: StationId) => twinThings.filter((thing) => thing.stationId === station);
+
+/** Only saved actionable reports create room markers; chat and drafts do not. */
+export function reportMarkers(requests: OfficeRequest[]) {
+  return twinThings.filter((thing) => !thing.stationId).flatMap((thing) => {
+    const reports = requests.filter((r) =>
+      ["maintenance", "purchase", "grocery"].includes(r.intent ?? "") &&
+      ["maintenance_open", "awaiting_approval", "ordered", "checkout_ready", "failed"].includes(r.status) &&
+      thingForRequest(r)?.id === thing.id);
+    return reports.length ? [{ thing, reports }] : [];
+  });
+}

@@ -112,11 +112,13 @@ function usePaced(target: number, key: string | undefined, fresh: boolean) {
 export function AgentStage({
   request,
   stationName,
+  agentMode,
   offline,
   children,
 }: {
   request: OfficeRequest | undefined;
   stationName: string | undefined;
+  agentMode: "live" | "mock" | "connecting";
   offline: boolean;
   children: ReactNode;
 }) {
@@ -163,7 +165,7 @@ export function AgentStage({
           <a className="wordmark" href="/" aria-label="Office home">
             office
           </a>
-          <span>{request?.grocery ? "Live Oda cart" : "Simulation"}</span>
+          <span>{offline ? "Disconnected" : agentMode === "live" ? "Live AI" : agentMode === "mock" ? "Mock agent" : "Connecting"}</span>
         </header>
         <Avatar mood={mood} request={offline ? undefined : request} />
         <div className="stage-copy" aria-live="polite">

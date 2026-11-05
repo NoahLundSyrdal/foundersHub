@@ -289,3 +289,31 @@ def test_live_proposal_preserves_merged_work_and_whatsapp_confirmation(live, tmp
         linked = next(item for item in work if item.get("links", {}).get("task_id") == task["id"])
         assert linked["status"] == "waiting"
         assert client.get("/api/work/inventory").json()["items"] == []
+
+
+def test_dashboard_chat_preserves_history_and_stage_sensor_tool(live):
+    from office.demo_history import seed
+    client, app, _ = live
+    seed(app.state.conn)
+    calls = []
+    def model(messages, info):
+        calls.append(messages)
+        assert 'read_environment_history' in {t.name for t in info.function_tools}
+        assert 'room_request' in {t.name for t in info.function_tools}
+        if not returned(messages, 'read_environment_history'):
+            return ModelResponse(parts=[ToolCallPart('read_environment_history', {'board_id': 'kitchen'})])
+        samples = returned(messages, 'read_environment_history')[-1]
+        assert len(samples) == 6 and all(r['simulation'] for r in samples)
+        return reply(info, 'Two earlier simulated checks showed high CO2 at the stage; no booking made.')
+    with conversation.assistant.override(model=FunctionModel(model)):
+        body = {'conversation_id': 'stage-chat', 'event_id': 'stage-first', 'board_id': 'kitchen',
+                'text': 'Could we meet at the stage?'}
+        first = client.post('/api/chat', json=body)
+        assert first.status_code == 200 and first.json()['request']['status'] == 'resolved', first.text
+        second = client.post('/api/chat', json={**body, 'event_id': 'stage-followup', 'text': 'What about earlier conditions?'})
+        assert second.status_code == 200 and second.json()['request']['status'] == 'resolved', second.text
+        prompts = [p.content for m in calls[-1] for p in m.parts if isinstance(p, UserPromptPart)]
+        assert body['text'] in prompts and 'What about earlier conditions?' in prompts
+        count = len(calls)
+        assert client.post('/api/chat', json=body).json()['duplicate']
+        assert len(calls) == count

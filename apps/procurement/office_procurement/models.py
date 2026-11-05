@@ -3,12 +3,15 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator, model_serializer
 
 
+from .schemas import StationId
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
 class Station(StrictModel):
-    id: Literal["kitchen", "bathroom", "printer"]
+    id: StationId
     name: str = Field(min_length=1, max_length=200)
     responsible_team: str = Field(max_length=200)
     equipment: list[str] = Field(max_length=30)
@@ -18,7 +21,7 @@ class Station(StrictModel):
 class Product(StrictModel):
     id: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=200)
-    station_id: Literal["kitchen", "bathroom", "printer"]
+    station_id: StationId
     price_nok: float = Field(ge=0, allow_inf_nan=False)
     delivery_estimate: str = Field(max_length=200)
     supplier: str = Field(max_length=200)
@@ -33,7 +36,7 @@ class Policy(StrictModel):
 
 class OpenRequest(StrictModel):
     id: str = Field(max_length=128)
-    station_id: Literal["kitchen", "bathroom", "printer"]
+    station_id: StationId
     item_id: str | None
     status: str = Field(max_length=40)
 
@@ -87,7 +90,7 @@ class Assessment(StrictModel):
 
 
 class Interpretation(StrictModel):
-    intent: Literal["purchase", "maintenance", "clarification", "grocery"]
+    intent: Literal["purchase", "maintenance", "clarification", "grocery", "conversation"]
     item_id: str | None
     summary: str = Field(min_length=1, max_length=500)
     quantity: int = Field(ge=1, le=20, strict=True)

@@ -16,11 +16,11 @@ from pydantic_ai import Agent, ModelRetry, RunContext, ToolOutput
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 from pydantic_ai.usage import UsageLimits
 
-from office import bus, config, db, dispatch, environment_queries, procurement_workflow
+from office import bus, config, db, dispatch, environment_queries, procurement_workflow, speaker
 from office.agent import progress, notebook, limits
 from office import brain, integrations
 from office.development import Development, DevelopmentError
-from office.plugins import knowledge
+from office.plugins import knowledge, sensors
 from office.deps import Deps
 from office.room_conditions import RoomConditions
 from office.room_messaging import RoomMessageConflict
@@ -59,7 +59,7 @@ def task_result(conn, task_id, rooms=None):
 
 
 assistant = Agent(
-    deps_type=Deps, output_type=ToolOutput(Reply), capabilities=[progress, limits, notebook], retries=1,
+    deps_type=Deps, output_type=ToolOutput(Reply), capabilities=[speaker.SpeakerContext(), progress, limits, notebook], retries=1,
     instructions="""You are the office assistant. Understand the user's whole request naturally,
 including Norwegian, indirect phrasing, follow-ups and changes of subject. Reply in their language.
 You can discuss anything useful: orders and their status, broken equipment, room availability,
@@ -85,6 +85,7 @@ Read tools before claiming an action happened. Preserve tool-reported pending, f
 uncertain outcomes. A local ticket does not mean anybody was contacted. A free room is not reserved.
 Messages need an explicit user request; never send one merely because a conflict exists.
 
+Before advising on a meeting at the demo stage, read_environment_history for board kitchen, which feeds the stage button. Mention any earlier simulated poor conditions explicitly as simulated history, not current measurements.
 Current measurements require fresh data with units. Missing/stale values are unknown. Historical
 claims require recorded comparable days; explain insufficient history. Synthetic sensor/history and
 calendar data must be labelled demo/simulated. You may give practical advice grounded in those facts.
@@ -264,14 +265,15 @@ async def room_request(ctx: RunContext[Deps], action: Literal["check_room", "mes
         return {"available": False, "reason": str(error)}
 
 
-async def run(conn, task_id, prompt, *, rooms=None, event_id=None, conversation_id=None):
+async def run(conn, task_id, prompt, *, rooms=None, event_id=None, conversation_id=None, chat_history=None):
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
-    deps = Deps(config.BOARDS[task["board_id"]], config.person(task["person"]), task_id, conn,
-                rooms, event_id, conversation_id, prompt)
-    history = ModelMessagesTypeAdapter.validate_json(task["messages"])
+    who = speaker.load(conn, task_id, task["person"])  # who spoke and on what evidence; never authority
+    deps = Deps(config.BOARDS[task["board_id"]], who.person, task_id, conn,
+                rooms, event_id, conversation_id, prompt, speaker=who)
+    history = chat_history if chat_history is not None else ModelMessagesTypeAdapter.validate_json(task["messages"])
     async with asyncio.timeout(60):
         result = await assistant.run(prompt, model=config.MODEL, deps=deps, message_history=history or None,
-            toolsets=[knowledge.toolset] + integrations.toolsets(),
+            toolsets=[knowledge.toolset, sensors.toolset] + integrations.toolsets(),
             usage_limits=UsageLimits(request_limit=6, tool_calls_limit=10, total_tokens_limit=48000),
             model_settings={"timeout": 25, "max_tokens": 1800, "parallel_tool_calls": False})
     output = result.output

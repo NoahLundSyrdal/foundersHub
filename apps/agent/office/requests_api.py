@@ -19,6 +19,7 @@ def request_view(conn, task_id: str) -> dict:
     task = enrich_task(conn, db.task_view(raw))
     order = db.row(conn, "SELECT * FROM orders WHERE task_id=? ORDER BY rowid DESC LIMIT 1", task_id)
     ticket = db.row(conn, "SELECT * FROM tickets WHERE task_id=? ORDER BY rowid DESC LIMIT 1", task_id)
+    interpretation = (procurement_workflow.get_context(conn, task_id) or {}).get("interpretation", {})
     status = task["status"]
     if status == "running":
         status = "processing"
@@ -28,11 +29,12 @@ def request_view(conn, task_id: str) -> dict:
         status = ("resolved" if order["status"] == "delivered" else "ordered") if order else (
             ("resolved" if ticket["status"] == "resolved" else "maintenance_open") if ticket else
             # A finished proposal with no order was refused, so nothing is left to do.
-            "resolved" if task.get("proposal") or (task.get("grocery") or {}).get("proposal") or raw["messages"] != "[]" else "needs_clarification")
+            "resolved" if task.get("proposal") or (task.get("grocery") or {}).get("proposal") or interpretation.get("intent") == "conversation" or raw["messages"] != "[]" else "needs_clarification")
     proposal = task.get("proposal")
     return {
         "id": task_id, "station_id": task["board_id"], "user_id": None,
-        "original_text": task["prompt"], "intent": "grocery" if task.get("grocery") else "purchase" if proposal else "maintenance" if ticket else None,
+        "report_location_text": ticket["summary"] if ticket else None,
+        "original_text": task["prompt"], "intent": "grocery" if task.get("grocery") else "purchase" if proposal else "maintenance" if ticket else "conversation" if interpretation.get("intent") == "conversation" else None,
         "status": status, "summary": task.get("reply") or task["prompt"] or "Waiting for your request",
         "question": task.get("reply") if status == "needs_clarification" else None,
         "item_id": proposal["product"]["id"] if proposal else None,

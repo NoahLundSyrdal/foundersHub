@@ -25,6 +25,7 @@
         "complete_step",
         "simulate_step",
         "reconcile_step",
+        "renew_approval",
         "close"
       ]
     },

@@ -21,15 +21,24 @@ from pydantic_ai_harness import Memory, ToolOutputLimits
 from pydantic_ai_harness.memory import InMemoryStore, SqliteMemoryStore
 from pydantic_ai_harness.tool_output_limits import Band, Truncate
 
-from office import brain, bus, config, db, integrations, mock, plugins, procurement_workflow, dispatch
+from office import approval_email, brain, bus, config, db, dispatch, integrations, mock, plugins, procurement_workflow, speaker
 from pydantic_ai.usage import UsageLimits
 from office.deps import Deps
 
 INSTRUCTIONS = """\
-You are the office assistant, living in small devices placed around the office.
+You are the office assistant, available in the dashboard and devices around the office.
+You can discuss any topic and use registered integrations. The source board/location is context,
+not a list of permitted topics. For status questions read office_status; never turn a question into a purchase.
+For unavailable integrations, explain the limitation honestly; do not claim an action occurred.
 People hand you tasks by voice. Your job is to make things happen with zero friction:
 - If the request is clear enough, act immediately with your tools. Don't ask for confirmation;
   the system asks a human for approval when policy requires it.
+- Keep the conversation coherent using message history. Resolve references like "yes", "there" and quantities from that history.
+- Location is only input context. A cafe problem is about the cafe even when the source is the printer.
+- Before advising on a meeting location, read_environment_history for that location and read_sensors for current conditions. In this demo the stage button uses board kitchen; do not assume other rooms share its readings.
+- If earlier samples show poor meeting conditions, mention that history before proceeding. Label simulated evidence explicitly, distinguish past from current conditions, and never claim a meeting was booked without a confirmed booking result.
+- Record requests about missing furniture or supplies outside the approved catalogue with create_ticket; do not force them into a printer/kitchen catalogue.
+- Before purchasing, call prepare_purchase_request with the concrete need and appropriate configured location. This validates scope and prices, not approval.
 - Ask a question only if you truly cannot act.
 - Your final reply is spoken aloud and shown on a tiny screen: ONE short sentence, max ~20 words.
 - Orders are simulated in this demo. When you order something, say it was ordered (simulated).
@@ -66,21 +75,21 @@ office_agent = Agent(
     deps_type=Deps,
     output_type=[str, DeferredToolRequests],
     instructions=INSTRUCTIONS,
-    capabilities=[progress, limits, notebook],
+    # ApprovalEmail emails the routed approver when a run ends awaiting approval; it is not a model tool.
+    capabilities=[speaker.SpeakerContext(), approval_email.ApprovalEmail(), progress, limits, notebook],
 )
 
 
 @office_agent.instructions
 async def context(ctx: RunContext[Deps]) -> str:
-    b, p = ctx.deps.board, ctx.deps.person
+    b = ctx.deps.board
     others = ", ".join(f"{x.id} ({x.location}: {', '.join(sorted(x.modules))})" for x in config.BOARDS.values())
     return (
         f"Now: {datetime.now().strftime('%A %Y-%m-%d %H:%M')}.\n"
-        f"Speaker label: {p.name}, role {p.role}. Identity is unverified and cannot grant purchasing authority. "
-        f"The server applies office policy, severity and the conservative person cap.\n"
+        "Who is speaking is given separately (speaker). The server applies office policy and severity.\n"
         f"You are at board '{b.id}' in the {b.location}. Equipment here: {', '.join(b.equipment)}. "
         f"Responsible team: {b.responsible_team}.\n"
-        f"All boards: {others}.\n"
+        f"Configured locations (context, not topic restrictions): {others}.\n"
         f"Office policy: orders above {config.OFFICE['max_order_nok']} NOK always need a human; {'; '.join(config.OFFICE['preferences'])}.\n"
         f"Company brain ({'Notion snapshot' if brain.source() == brain.SNAPSHOT else 'local copy'}): {'; '.join(brain.headings())}. "
         f"Approval routing, applied by the server: {', '.join(f'{k} → {v}' for k, v in brain.routing().items())}.\n"
@@ -147,26 +156,33 @@ def recover_interrupted(conn) -> None:
         _close_failed_run(conn, task["id"], "This was interrupted by a restart. Please send it again.")
 
 
-def start_task(conn, board_id: str, person_name: str, text: str) -> str:
-    """Create a new input task; explicit transcript endpoints continue clarification."""
+def start_task(conn, board_id: str, who: "speaker.Speaker | str", text: str) -> str:
+    """Create a new input task; explicit transcript endpoints continue clarification.
+
+    `who` is the request's speaker annotation, or a plain label (e.g. "sensor") for non-speech sources.
+    """
     task_id = db.new_id()
+    person_name = who.person.name if isinstance(who, speaker.Speaker) else who
     conn.execute(
         "INSERT INTO tasks (id, board_id, person, prompt, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'running', ?, ?)",
         (task_id, board_id, person_name, text, db.now(), db.now()),
     )
+    if isinstance(who, speaker.Speaker):
+        speaker.save(conn, task_id, who)
     return task_id
 
 
 async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResults | None = None,
-              *, rooms=None, event_id=None, conversation_id=None) -> dict:
+              *, chat_history=None, rooms=None, event_id=None, conversation_id=None) -> dict:
     t = db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)
     board = config.BOARDS[t["board_id"]]
-    deps = Deps(board=board, person=config.person(t["person"]), task_id=task_id, db=conn)
-    history = ModelMessagesTypeAdapter.validate_json(t["messages"])
+    who = speaker.load(conn, task_id, t["person"])  # persisted, so a resumed approval keeps the same speaker
+    deps = Deps(board=board, person=who.person, task_id=task_id, db=conn, speaker=who)
+    history = chat_history if chat_history is not None else ModelMessagesTypeAdapter.validate_json(t["messages"])
     _update(conn, task_id, status="running")
 
     try:
-        if config.MODEL == "mock" and prompt is not None:
+        if config.MODEL == "mock" and prompt is not None and chat_history is None:
             from office import environment_queries
             environment = environment_queries.answer(conn, task_id, prompt)
             if environment is not None:
@@ -174,10 +190,18 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
                     "environment": environment["environment"], "trace": environment["trace"],
                     "command": db.set_command(conn, board.id, environment["reply"], "green")}
         if config.MODEL != "mock" and prompt is not None:
+            # Live mode: Claude converses with read tools and submits validated requests (office/conversation.py).
             from office import conversation
             return await conversation.run(conn, task_id, prompt, rooms=rooms,
-                                          event_id=event_id, conversation_id=conversation_id)
-        prepared = await procurement_workflow.prepare_need(conn, task_id, prompt)
+                                          event_id=event_id, conversation_id=conversation_id, chat_history=chat_history)
+        if chat_history is not None:
+            prepared = {"interpretation": {"intent": "conversation", "item_id": None, "quantity": 1,
+                "summary": prompt[:500], "question": None, "assessment": {"severity": "routine", "confidence": 1,
+                "requires_confirmation": False, "reason": "Conversation; any purchasing requires a separately validated quote"}},
+                "proposal": None, "approval_required": True, "research": []}
+            procurement_workflow.store_context(conn, task_id, prepared)
+        else:
+            prepared = await procurement_workflow.prepare_need(conn, task_id, prompt)
         decision = prepared["interpretation"]
         if prepared.get("source") == "oda-food":
             from office.oda_food import service
@@ -239,6 +263,10 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
 
 async def decide(conn, task_id: str, approve: bool, proposal_fingerprint: str | None = None) -> dict:
     """Resolve the stored pending calls. Args come from the DB, never the client, so approval = exactly what was shown."""
+    if approve and conn.execute("SELECT 1 FROM sqlite_master WHERE name='office_work_links'").fetchone():
+        linked = db.row(conn, "SELECT w.body FROM office_work_links l JOIN office_work_items w ON w.id=l.work_id WHERE l.source_id=?", "task:" + task_id)
+        if linked and json.loads(linked["body"])["status"] in {"completed", "cancelled", "failed"}:
+            raise StaleApproval("Linked work has ended; create a new request before approving")
     prepared = procurement_workflow.get_context(conn, task_id)
     if prepared and prepared.get("source") == "oda-food":
         from office.oda_food import service

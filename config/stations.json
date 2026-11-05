@@ -1,5 +1,12 @@
 [
   {
+    "id": "office",
+    "name": "General",
+    "responsible_team": "Office team",
+    "equipment": [],
+    "item_ids": []
+  },
+  {
     "id": "kitchen",
     "name": "Kitchen",
     "responsible_team": "Facilities",

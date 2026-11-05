@@ -76,6 +76,7 @@ function Ticket({ request, station, highlighted, openCount, busy, onApprove, onR
         <h3>{reported ? request.original_text : requestTitle(request)}</h3>
         {reported && !proposal && request.summary !== request.original_text && <p className="ticket-summary">{requestTitle(request)}</p>}
         <dl>
+          <div><dt>Order</dt><dd>{request.supplier_reference ? `Simulated order ${request.supplier_reference}` : proposal ? "Proposal · awaiting order confirmation" : "No purchase attached"}</dd></div>
           <div><dt>Where</dt><dd>{station?.name ?? request.station_id}</dd></div>
           {team && <div><dt>Team</dt><dd>{team}</dd></div>}
           {proposal && <div><dt>Item</dt><dd>{proposal.quantity} × {proposal.product.name}</dd></div>}

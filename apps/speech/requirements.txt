@@ -1,6 +1,5 @@
 faster-whisper>=1.2
 sounddevice>=0.5
 numpy>=1.26
-sherpa-onnx>=1.12  # speaker identification (speaker_id.py); model auto-downloads to .data/models
 # Setup: uv venv --python 3.12 apps/speech/.venv && uv pip install --python apps/speech/.venv/bin/python -r apps/speech/requirements.txt
 # Needs ffmpeg on PATH for file input (brew install ffmpeg).

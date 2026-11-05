@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { z } from "zod";
 import { RoomEnvironmentSnapshotSchema, RoomEnvironmentAdviceSchema, RoomDemoRequestSchema, RoomDemoDatasetSchema, RoomDemoClearResultSchema } from "./room-environment.js";
 import { WorkCreateSchema, WorkItemSchema, WorkActionSchema, WorkEvidenceCreateSchema, WorkDecisionSchema, WorkRoutineCreateSchema } from "./work.js";
-import { DeviceEventSchema, FacilityReadingSchema, FacilityRuleSchema, StationActionSchema, StationActionClaimSchema, StationActionAcknowledgementSchema } from "./index.js";
+import { ChatMessageSchema, DeviceEventSchema, FacilityReadingSchema, FacilityRuleSchema, StationActionSchema, StationActionClaimSchema, StationActionAcknowledgementSchema } from "./index.js";
 writeFileSync(
   new URL("../device-event.schema.json", import.meta.url),
   JSON.stringify(z.toJSONSchema(DeviceEventSchema), null, 2) + "\n",
@@ -17,6 +17,7 @@ for (const [name, schema] of [["work-create", WorkCreateSchema], ["work-item", W
   writeFileSync(new URL(`../${name}.schema.json`, import.meta.url), JSON.stringify(z.toJSONSchema(schema), null, 2) + "\n");
 }
 
+writeFileSync(new URL("../chat-message.schema.json", import.meta.url), JSON.stringify(z.toJSONSchema(ChatMessageSchema), null, 2) + "\n");
 for (const [name, schema] of [["room-environment-snapshot", RoomEnvironmentSnapshotSchema], ["room-environment-advice", RoomEnvironmentAdviceSchema],
   ["room-demo-request", RoomDemoRequestSchema], ["room-demo-dataset", RoomDemoDatasetSchema], ["room-demo-clear-result", RoomDemoClearResultSchema]] as const) {
   writeFileSync(new URL(`../${name}.schema.json`, import.meta.url), JSON.stringify(z.toJSONSchema(schema), null, 2) + "\n");

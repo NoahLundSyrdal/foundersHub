@@ -144,8 +144,19 @@ class WorkBridge:
         attempt = db.row(self.conn, "SELECT state FROM procurement_attempts WHERE task_id=?", work["links"]["task_id"])
         if operation == "action" and body.action in {"cancel", "fail"} and attempt and attempt["state"] in {"started", "uncertain"}:
             raise WorkConflict("Reconcile the existing purchasing execution before ending coordination")
+        if work["template_key"] == "maintenance" and operation == "action" and body.action in {"start_step", "complete_step", "close"}:
+            task_id = work["links"]["task_id"]
+            proposal = (procurement_workflow.get_context(self.conn, task_id) or {}).get("proposal")
+            if proposal and proposal.get("fulfillment_kind") == "service":
+                order = db.row(self.conn, "SELECT id FROM orders WHERE task_id=?", task_id)
+                task = db.row(self.conn, "SELECT status FROM tasks WHERE id=?", task_id)
+                ticket = db.row(self.conn, "SELECT id FROM tickets WHERE task_id=?", task_id)
+                # A suggested quote alone is not a booking: local ticket-only
+                # tasks can finish without purchasing a contractor service.
+                if not order and (not ticket or task["status"] != "done"):
+                    raise WorkConflict("Confirm the service booking in the linked request before completing repair work")
         step_id = getattr(body, "step_id", None)
-        if operation == "decision" or (operation == "action" and body.action in {"simulate_step", "reconcile_step"}):
+        if operation == "decision" or (operation == "action" and body.action in {"simulate_step", "reconcile_step", "renew_approval"}):
             raise WorkConflict("Use the linked domain workflow for approval and execution; record actual repair evidence separately")
         if work["template_key"] == "replenishment":
             if step_id in {"order", "inventory"} and operation in {"evidence", "action"}:

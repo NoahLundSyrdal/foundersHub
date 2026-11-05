@@ -13,18 +13,19 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
-from office import facility_api, oda_food, oda_api, work_api
+from office import agent, approval_email, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
+from office import chat_api, facility_api, oda_food, oda_api, work_api
 from office import alert_rules, order_confirmations, whatsapp_delivery, room_service, room_demo, development, development_api
 from office.room_messaging import RoomMessageConflict
 from office.facility_rules import FacilityReading
+from office.speaker import Speaker
 
 
 class Input(BaseModel):
-    board_id: str
+    board_id: str = "office"
     text: str | None = None
     audio_b64: str | None = None  # any format OpenAI transcription accepts
-    person: str | None = None  # dashboard override / already-identified speaker
+    person: str | None = None  # dashboard/device pick; overrides voice ID. Unverified either way
     event_id: str | None = Field(default=None, min_length=1, max_length=128)
     conversation_id: str | None = Field(default=None, min_length=1, max_length=128)
 
@@ -57,6 +58,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
     conn = db.connect(db_path)
     procurement_workflow.ensure_schema(conn)
     agent.recover_interrupted(conn)
+    approval_email.recover(conn)
     groceries = oda_food.service(conn)
     mutation_lock = asyncio.Lock()
     facilities = facility_api.FacilityService(conn, mutation_lock)
@@ -106,6 +108,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
             yield
         finally:
             oda_food.release(conn)
+            await approval_email.drain()
             monitor.cancel()
             work_monitor.cancel()
             for pending in approval_monitors:
@@ -133,6 +136,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
     app.include_router(facility_api.router(facilities))
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
+    app.include_router(chat_api.router(conn, mutation_lock, rooms))
     app.include_router(room_demo.router(conn, mutation_lock))
     if delivery is not None:
         app.include_router(whatsapp_delivery.router(delivery))
@@ -145,7 +149,8 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
             raise HTTPException(404, f"Unknown board {board_id!r}")
         return config.BOARDS[board_id]
 
-    async def handle_text(board_id: str, text: str, person: str | None, event_id=None, conversation_id=None) -> dict:
+    async def handle_text(board_id: str, text: str, speaker: Speaker, event_id=None, conversation_id=None) -> dict:
+        person = speaker.person.name if speaker.identified else None  # a label for room messages, never authority
         if config.MODEL != "mock":
             from office import conversation
             try:
@@ -163,7 +168,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
                     raise HTTPException(409, "Request already has an action; start a new conversation.")
                 task_id = conversation_id
             else:
-                task_id = agent.start_task(conn, board_id, person or config.GUEST.name, text)
+                task_id = agent.start_task(conn, board_id, speaker, text)
             conversation.input_receipt(conn, event_id, board_id, text, conversation_id, task_id=task_id)
             result = await agent.run(conn, task_id, text, rooms=rooms, event_id=event_id, conversation_id=conversation_id)
             if event_id:
@@ -175,7 +180,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
             raise HTTPException(409, str(error)) from error
         if room is not None:
             return room
-        task_id = agent.start_task(conn, board_id, person or config.GUEST.name, text)
+        task_id = agent.start_task(conn, board_id, speaker, text)
         return await agent.run(conn, task_id, text)
 
     @app.get("/api/health")
@@ -220,18 +225,27 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
     @app.post("/api/input")
     async def input_(body: Input):
         board_or_404(body.board_id)
-        text, person = body.text, body.person
+        text = body.text
+        # An explicit pick (dashboard/device) wins over voice ID; neither is authentication.
+        speaker = Speaker.declared(body.person) if body.person else Speaker.unknown()
         if body.audio_b64:
             try:
                 audio = base64.b64decode(body.audio_b64, validate=True)
             except binascii.Error:
                 raise HTTPException(400, "audio_b64 is not valid base64")
-            text = text or await asyncio.to_thread(voice.transcribe, audio)  # network call: keep the loop free
-            person = person or await asyncio.to_thread(voice.identify, audio)
+
+            async def given(value):
+                return value
+
+            # Both are network calls: run them in parallel, off the event loop.
+            text, speaker = await asyncio.gather(
+                given(text) if text else asyncio.to_thread(voice.transcribe, audio),
+                given(speaker) if body.person else asyncio.to_thread(voice.identify, audio),
+            )
         if not text or not text.strip():
             raise HTTPException(400, "Need text or audio")
         async with mutation_lock:
-            return await handle_text(body.board_id, text.strip(), person, body.event_id, body.conversation_id)
+            return await handle_text(body.board_id, text.strip(), speaker, body.event_id, body.conversation_id)
 
     @app.get("/api/room-conversations/{conversation_id}")
     async def room_conversation(conversation_id: str):

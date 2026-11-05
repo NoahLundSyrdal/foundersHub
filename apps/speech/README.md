@@ -25,4 +25,4 @@ apps/speech/.venv/bin/python apps/speech/voice_station.py --port "$(ls /dev/cu.u
 
 Ready when the board screen shows "Trykk paa knappen og snakk" with a blue LED. Speak close to the laptop.
 
-`stt.py` also works on its own (`python apps/speech/stt.py --station kitchen`), and `speaker_id.py` enrolls/identifies consenting speakers locally (identity is informational only).
+`stt.py` also works on its own (`python apps/speech/stt.py --station kitchen`).

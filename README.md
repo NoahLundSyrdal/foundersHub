@@ -121,7 +121,7 @@ Runtime database files live in ignored `.data/` by default. Stop the backend bef
 
 The application uses a Python FastAPI/Pydantic AI backend with one SQLite owner and a React/TypeScript frontend. Three.js renders the office twin. The live Anthropic path has bounded model/tool usage; deterministic mock interpretation remains available without credentials.
 
-The important technical boundaries are validated decisions, exact proposal approval, persisted execution attempts, and idempotent input. Optional supplier/FINN discovery is read-only. Live stock telemetry, speaker identity, supplier checkout and contractor booking remain separate integrations. See [the architecture rationale](docs/architecture.md#technology-rationale).
+The important technical boundaries are validated decisions, exact proposal approval, persisted execution attempts, and idempotent input. Optional supplier/FINN discovery is read-only. Live stock telemetry, supplier checkout and contractor booking remain separate integrations. Speaker identity ([apps/voiceid](apps/voiceid/README.md)) labels voice requests for context and restrictive access control only; it never grants authority. See [the architecture rationale](docs/architecture.md#technology-rationale).
 
 ## What to build next
 
@@ -131,7 +131,7 @@ See [architecture and API contracts](docs/architecture.md), [demo steps](docs/de
 
 ## Company brain on Notion
 
-Notion holds the office's procedures and an **approval routing** table: which person approves which kind of approval. Application code reads the table and attaches the approver to every proposal; the model never chooses who approves. The dashboard shows it above the approve buttons ("For Leo · Above the office cap of 1000 NOK per order").
+Notion holds the office's procedures and an **approval routing** table: which person approves which kind of approval. Application code reads the table and attaches the approver to every proposal; the model never chooses who approves. The dashboard shows it above the approve buttons ("For Noah · Above the office cap of 1000 NOK per order").
 
 | Approval type | When (decided by the server) |
 | --- | --- |
@@ -148,8 +148,28 @@ npm run connect -- notion   # browser sign-in to Notion's hosted MCP; token in i
 
 Set `NOTION_BRAIN_PAGE_ID` to a page whose child pages hold the procedures and a table with `Approval type | Approver` (same shape as `config/brain/approval-routing.md`, with at least `purchase` and `purchase_over_cap`). `npm run connect -- sync` or `POST /api/brain/sync` re-reads it into `.data/brain/`; a sync without a valid routing table is refused and the previous snapshot stays. `GET /api/brain` shows what is in use. The agent also gets Notion's read-only tools; if Notion is down, a run continues without them. It keeps an office notebook across tasks (Pydantic AI Harness `Memory`, `.data/memory.sqlite`, live mode only).
 
+## Approval emails (AgentMail)
+
+When a request enters **awaiting approval** (a chat or device order, a sensor replenishment, a refreshed quote, an Oda basket), the server emails the approver named in the routing table. For agent runs this is the `ApprovalEmail` capability (`apps/agent/office/approval_email.py`): its `after_run` hook sees the run end with `DeferredToolRequests` and uses the approval metadata the application attached. Facility replenishment, Oda baskets and quote refreshes call the same module's `notify()`. The model has no email tool. The email is a **notification only**: it lists the exact items, total, approval type and reason, who asked and how they were identified (always unverified), the board and the task id, and says whether the order is simulated. Approve or reject on the dashboard; replying to the email does nothing.
+
+At most one email goes out per task and exact proposal (`approval_emails` in SQLite, plus an AgentMail idempotency key). Retries, restarts and repeated approval states do not resend; a refreshed quote can. A send that may have reached AgentMail (timeout, 5xx, restart mid-send) is recorded as `uncertain` and never retried automatically. A failed or skipped email never blocks the request.
+
+Sending is off by default. To enable it with a live model, set in `.env`: `APPROVAL_EMAIL_ENABLED=true`, `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID` (the sending inbox) and `APPROVER_EMAILS=Noah:you@example.com`. Approver addresses are personal data: keep them in `.env`, never in Git. Mock mode and tests never send.
+
 ## Food on Oda
 
 Use **Connect Oda** in the dashboard, finish sign-in/consent, then ask for explicit products and pack quantities, for example: `Order 2 packs of ground coffee, 500g each, and 1 carton of whole milk, 1 litre`. Set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY` for live interpretation. Review the basket and click **Add these products to Oda cart**. Delivery fees and the delivery slot are confirmed when you **Review delivery and pay on Oda**. Cart preparation does not place an order.
 
-`ODA_FOOD_ENABLED=true` is the default. Credentials stay in ignored `.data/oda/oauth.json`. Account signup/consent and a real cart test are deferred; automated tests use injected provider responses. See [the procurement guide](docs/procurement.md#food-through-the-official-oda-mcp).
+`ODA_FOOD_ENABLED=false` is the default for offline, simulated demos. Set it to `true` to enable Oda and connect an account. Credentials stay in ignored `.data/oda/oauth.json`. Account signup/consent and a real cart test are deferred; automated tests use injected provider responses. See [the procurement guide](docs/procurement.md#food-through-the-official-oda-mcp).
+
+### Conversation context and integrations
+
+Chat defaults to **General**. The Kitchen, Bathroom and Printer area buttons provide optional location context; they do not define the assistant's topics. General questions, planning and status requests are routed to the office agent and its registered tools, without preparing a purchase. The 3D model retains its existing three physical areas.
+
+Add capabilities through `apps/agent/office/plugins`: register a toolset in `PLUGINS` and use `requires = set()` for integrations available from every context. Module requirements are for hardware-dependent tools. Location IDs are strings validated against configured boards at the API boundary; new boards can converse without a procurement station. To enable purchasing at a new location, configure its station, approved catalogue and supplier offers. Exact-quote approval, spending limits and duplicate checks still apply.
+
+Mock mode remains a deterministic offline demo: it can report local order, approval and ticket status, but does not provide general language understanding or execute unavailable integrations. Live conversation uses the configured provider; these changes were tested offline with injected model responses. Physical device mappings and the 3D geometry remain explicit fixture locations, not conversation topic restrictions.
+
+### Persistent dashboard chat
+
+Dashboard messages use `/api/chat` and a browser-persisted conversation ID. SQLite stores each turn and its linked task; reloads and backend restarts retain the conversation. The existing Pydantic AI agent receives the last 40 conversational turns and chooses its registered tools. Device events retain their existing workflow. Purchase preparation is a validated tool call, and approval still resumes the original task and exact quote. Retried message IDs return the saved task instead of executing again. Earlier device/request conversations remain in History; new dashboard conversations are stored separately.

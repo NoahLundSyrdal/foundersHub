@@ -57,7 +57,7 @@ def execute_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> 
         value["approval_required"] = True
         workflow.store_context(conn, task_id, value)
     if requires_human and not ctx.tool_call_approved:
-        raise ApprovalRequired(metadata=workflow.approval_metadata(value, ctx.deps.person.name))
+        raise ApprovalRequired(metadata=workflow.approval_metadata(value, ctx.deps.person.name, ctx.deps.speaker))
     if requires_human and value.get("approved_fingerprint") != proposal_fingerprint(proposal):
         return "Refused: exact quote approval has not been recorded."
     conn.execute("INSERT INTO procurement_attempts VALUES(?,?,?,'started',NULL)",
@@ -81,3 +81,20 @@ def execute_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> 
 async def place_order(ctx: RunContext[Deps], product_id: str, quantity: int = 1) -> str:
     """Execute the exact prepared quote in simulation after server policy and approval checks."""
     return execute_order(ctx, product_id, quantity)
+
+
+@toolset.tool
+async def prepare_purchase_request(ctx: RunContext[Deps], text: str, board_id: str) -> dict:
+    """Prepare a validated quote for an explicitly requested purchase. No execution or approval. Resolve the need from conversation before calling."""
+    from office import config
+    if board_id not in config.BOARDS or not text.strip() or len(text) > 2000:
+        return {"error": "Provide a configured location and a concrete purchase need"}
+    old = workflow.get_context(ctx.deps.db, ctx.deps.task_id) or {}
+    if old.get("proposal") or old.get("grocery") or workflow.execution_attempted(ctx.deps.db, ctx.deps.task_id):
+        return {"error": "A quote or execution already exists; use its existing review controls"}
+    ctx.deps.db.execute("UPDATE tasks SET board_id=? WHERE id=?", (board_id, ctx.deps.task_id))
+    ctx.deps.board = config.BOARDS[board_id]
+    try:
+        return await workflow.prepare_need(ctx.deps.db, ctx.deps.task_id, text)
+    except workflow.ProcurementConflict as error:
+        return {"error": str(error)}
