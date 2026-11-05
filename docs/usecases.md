@@ -1,5 +1,11 @@
 # Use cases
 
+## Pitch
+
+You talk to your office, and it takes care of itself. Ask if the air is bad and it checks its sensors and tells you, or say "we need coffee" and it places the order once a person approves it and creates a ticket to track it.
+
+## Overview
+
 The office assistant has two main use cases. Both start with someone speaking to it.
 
 | Use case | Example | Result |
