@@ -1,4 +1,6 @@
-"""Project Leo's task workflow onto the existing TypeScript dashboard contract."""
+"""Dashboard request API: stations, requests and their approve / reject / requote / resolve actions.
+
+Projects agent tasks onto the `OfficeRequest` shape in packages/contracts, which the dashboard renders."""
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 

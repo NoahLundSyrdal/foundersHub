@@ -21,7 +21,7 @@ Open **http://localhost:5173**. The backend listens on **http://127.0.0.1:3001**
 
 No API key is needed with `OFFICE_MODEL=mock`. For live Pydantic AI, set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY` in the ignored `.env` file. Supplier execution remains simulated. Optional `TAVILY_API_KEY` enables supplier and FINN discovery.
 
-The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity assessment, exact approval and critical dashboard alerts. See [the procurement guide](docs/procurement.md) for endpoints and configuration. `AGENT_DATABASE_PATH` defaults to `.data/agent.sqlite`, separate from the older TypeScript database.
+The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity assessment, exact approval and critical dashboard alerts. See [the procurement guide](docs/procurement.md) for endpoints and configuration. `AGENT_DATABASE_PATH` defaults to `.data/agent.sqlite`.
 
 See [deterministic facility rules and hardware acceptance steps](docs/facility-rules.md) for backend sensor thresholds, controlled replenishment, local inspection tasks and station sound commands.
 
@@ -50,7 +50,6 @@ See [the demo guide](docs/demo.md) for the full sequence and [hardware notes](do
 ```text
 apps/web/                 React dashboard, browser voice input, approvals
 apps/agent/               Python API, Pydantic agent, SQLite, approvals, board integration
-apps/server/              Previous TypeScript backend (inactive reference)
 apps/procurement/         Pydantic AI worker, severity and supplier/FINN discovery
 apps/device/              Atech SDK bridge + kitchen firmware (verified board), USB bridge, simulator, tests
 packages/contracts/       Shared TypeScript schemas and generated JSON Schema
@@ -68,8 +67,8 @@ The backend owns persistent state and purchase execution. The web app and device
 | Owner | Area | First integration milestone |
 | --- | --- | --- |
 | 1 · Hardware | `apps/device/`, actual port mapping | Button event reaches API; feedback reaches board |
-| 2 · Agent and speech | `apps/server/src/agent/`, speech adapter | Transcript plus station produces validated intent |
-| 3 · Procurement | `apps/server/src/procurement/`, supplier adapters | Approved proposal produces a tracked execution result |
+| 2 · Agent and speech | `apps/agent/office/agent.py`, `apps/agent/office/voice.py` | Transcript plus station produces validated intent |
+| 3 · Procurement | `apps/procurement/`, `apps/agent/office/procurement_workflow.py` | Approved proposal produces a tracked execution result |
 | 4 · Dashboard and integration | `apps/web/`, core API/database | Full request → approval → confirmation flow |
 
 Agree contract changes in `packages/contracts/` before changing callers. Use short-lived branches and integrate early. Keep one integration owner; avoid editing another owner's files without coordinating.
@@ -116,7 +115,7 @@ Runtime database files live in ignored `.data/` by default. Stop the backend bef
 
 ## Technology choices
 
-The application uses a Python FastAPI/Pydantic AI backend with one SQLite owner and a React/TypeScript frontend. Three.js renders the office twin. The live Anthropic path has bounded model/tool usage; deterministic mock interpretation remains available without credentials. The older TypeScript API is retained under `npm run dev:legacy` for reference.
+The application uses a Python FastAPI/Pydantic AI backend with one SQLite owner and a React/TypeScript frontend. Three.js renders the office twin. The live Anthropic path has bounded model/tool usage; deterministic mock interpretation remains available without credentials.
 
 The important technical boundaries are validated decisions, exact proposal approval, persisted execution attempts, and idempotent input. Optional supplier/FINN discovery is read-only. Live stock telemetry, speaker identity, supplier checkout and contractor booking remain separate integrations. See [the architecture rationale](docs/architecture.md#technology-rationale).
 

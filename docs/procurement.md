@@ -37,7 +37,7 @@ npm run dev
 
 `npm run dev:agent` starts FastAPI on loopback port 3001. `OFFICE_MODEL=mock` runs entirely offline unless a search key is supplied. For live interpretation set `OFFICE_MODEL=anthropic:<supported-model>` and `ANTHROPIC_API_KEY`. `TAVILY_API_KEY` optionally enables read-only supplier/FINN discovery; `FINN_DISCOVERY_ENABLED=false` disables FINN-specific search. Live account/model availability was not verified.
 
-The Python runtime uses `AGENT_DATABASE_PATH` (default `.data/agent.sqlite`), separate from the previous TypeScript schema. Pydantic AI runs directly inside the app. Its structured assessment has bounded tool/model usage and a 35-second timeout. The old TypeScript server remains an inactive compatibility reference (`npm run dev:legacy`), not the default application.
+The Python runtime uses `AGENT_DATABASE_PATH` (default `.data/agent.sqlite`). Pydantic AI runs directly inside the app. Its structured assessment has bounded tool/model usage and a 35-second timeout.
 
 The primary connection endpoints are:
 
