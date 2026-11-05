@@ -41,6 +41,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     conn = db.connect(db_path)
     app = FastAPI(title="Office agent")
     procurement_workflow.ensure_schema(conn)
+    agent.recover_interrupted(conn)
     mutation_lock = asyncio.Lock()
     app.state.conn = conn
     app.state.mutation_lock = mutation_lock
