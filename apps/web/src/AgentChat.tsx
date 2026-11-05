@@ -97,7 +97,7 @@ export function AgentChat({ requests, stations, where, askCount, busy, offline, 
     setSpeechError("");
     const instance = new SpeechRecognition();
     recognition.current = instance;
-    instance.lang = "en-US";
+    instance.lang = "nb-NO";
     instance.continuous = false;
     instance.interimResults = false;
     instance.onresult = (event) => change(event.results[0][0].transcript);

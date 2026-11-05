@@ -1,0 +1,19 @@
+{
+  "simulation": true,
+  "label": "Synthetic room environment scenario — generated history and current preset, not measurements",
+  "timezone": "Europe/Oslo",
+  "history_days": 28,
+  "interval_minutes": 10,
+  "hot_start_hour": 8,
+  "hot_end_hour": 22,
+  "hot_temperature_c": 29.2,
+  "mild_temperature_c": 24.0,
+  "night_temperature_c": 22.0,
+  "humidity_pct": 45.0,
+  "co2_ppm": 850.0,
+  "current_values": {
+    "temperature_c": 29.2,
+    "humidity_pct": 45.0,
+    "co2_ppm": 1300.0
+  }
+}

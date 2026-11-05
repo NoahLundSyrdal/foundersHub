@@ -15,7 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import chat_api, facility_api, oda_food, oda_api, work_api
-from office import alert_rules, order_confirmations, whatsapp_delivery
+from office import alert_rules, order_confirmations, whatsapp_delivery, room_service, room_demo
+from office.room_messaging import RoomMessageConflict
 from office.facility_rules import FacilityReading
 
 
@@ -24,6 +25,8 @@ class Input(BaseModel):
     text: str | None = None
     audio_b64: str | None = None  # any format OpenAI transcription accepts
     person: str | None = None  # dashboard override / already-identified speaker
+    event_id: str | None = Field(default=None, min_length=1, max_length=128)
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class Sensor(BaseModel):
@@ -49,7 +52,8 @@ class DeviceEvent(BaseModel):  # shape emitted by apps/device/src/bridge.py
     payload: dict = {}
 
 
-def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
+def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, bridge_token_path=None,
+               room_parser=None, room_composer=None) -> FastAPI:
     conn = db.connect(db_path)
     procurement_workflow.ensure_schema(conn)
     agent.recover_interrupted(conn)
@@ -60,19 +64,28 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     approvals = delivery = None
     if os.getenv("OFFICE_ORDER_PUBLIC_URL") and os.getenv("OFFICE_ORDER_WHATSAPP_TO"):
         delivery = whatsapp_delivery.WhatsAppDelivery(conn, mutation_lock,
-            token_path=os.getenv("OFFICE_WHATSAPP_BRIDGE_TOKEN_PATH", str(config.ROOT / ".data/whatsapp/bridge-token")))
+            token_path=bridge_token_path or os.getenv("OFFICE_WHATSAPP_BRIDGE_TOKEN_PATH", str(config.ROOT / ".data/whatsapp/bridge-token")))
         approvals = order_confirmations.OrderConfirmations(conn, mutation_lock, delivery,
             recipient=os.environ["OFFICE_ORDER_WHATSAPP_TO"], public_base_url=os.environ["OFFICE_ORDER_PUBLIC_URL"])
         delivery.validate_job = approvals.validate_job
     if delivery is None and os.getenv("OFFICE_WHATSAPP_ALERTS", "1") != "0":
         # Equipment alerts use the same local bridge even when WhatsApp order approval is not configured.
         delivery = whatsapp_delivery.WhatsAppDelivery(conn, mutation_lock,
-            token_path=os.getenv("OFFICE_WHATSAPP_BRIDGE_TOKEN_PATH", str(config.ROOT / ".data/whatsapp/bridge-token")))
+            token_path=bridge_token_path or os.getenv("OFFICE_WHATSAPP_BRIDGE_TOKEN_PATH", str(config.ROOT / ".data/whatsapp/bridge-token")))
+    if delivery is None:
+        delivery = whatsapp_delivery.WhatsAppDelivery(conn, mutation_lock,
+            token_path=bridge_token_path or os.getenv("OFFICE_WHATSAPP_BRIDGE_TOKEN_PATH", str(config.ROOT / ".data/whatsapp/bridge-token")))
+    rooms = room_service.RoomService(conn, delivery,
+        room_calendar_path or os.getenv("ROOM_CALENDAR_PATH", str(config.ROOT / ".data/room-calendar.json")), room_parser, room_composer)
     alert_service = alert_rules.AlertRules(conn, mutation_lock, delivery)
-    if delivery is not None:
-        order_check = delivery.validate_job
-        delivery.validate_job = lambda job: (alert_service._validate(job) if str(job.get("execution_id", "")).startswith("alert-")
-                                             else bool(order_check and order_check(job)))
+    # All consumers share one bridge, with exact validators kept separate.
+    def validate_delivery(job):
+        if str(job.get("execution_id", "")).startswith("alert-"):
+            return alert_service._validate(job)
+        if approvals and approvals.validate_job(job):
+            return True
+        return rooms.validate_job(job)
+    delivery.validate_job = validate_delivery
 
     @asynccontextmanager
     async def lifespan(app):
@@ -112,11 +125,14 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     app.state.oda_food = groceries
     app.state.work = work
     app.state.order_confirmations = approvals
+    app.state.rooms = rooms
+    app.state.whatsapp = delivery
     app.include_router(requests_api.router(conn))
     app.include_router(facility_api.router(facilities))
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
-    app.include_router(chat_api.router(conn, mutation_lock))
+    app.include_router(chat_api.router(conn, mutation_lock, rooms))
+    app.include_router(room_demo.router(conn, mutation_lock))
     if delivery is not None:
         app.include_router(whatsapp_delivery.router(delivery))
     if approvals:
@@ -128,7 +144,36 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             raise HTTPException(404, f"Unknown board {board_id!r}")
         return config.BOARDS[board_id]
 
-    async def handle_text(board_id: str, text: str, person: str | None) -> dict:
+    async def handle_text(board_id: str, text: str, person: str | None, event_id=None, conversation_id=None) -> dict:
+        if config.MODEL != "mock":
+            from office import conversation
+            try:
+                previous = conversation.input_receipt(conn, event_id, board_id, text, conversation_id)
+            except RoomMessageConflict as error:
+                raise HTTPException(409, str(error)) from error
+            if previous:
+                return conversation.task_result(conn, previous, rooms)
+            if conversation_id:
+                task = db.row(conn, "SELECT * FROM tasks WHERE id=?", conversation_id)
+                if not task or task["board_id"] != board_id:
+                    raise HTTPException(409, "Conversation does not belong to this station.")
+                current = requests_api.request_view(conn, conversation_id)
+                if current["proposal"] or (current.get("grocery") or {}).get("proposal") or current["supplier_reference"] or current["assigned_to"]:
+                    raise HTTPException(409, "Request already has an action; start a new conversation.")
+                task_id = conversation_id
+            else:
+                task_id = agent.start_task(conn, board_id, person or config.GUEST.name, text)
+            conversation.input_receipt(conn, event_id, board_id, text, conversation_id, task_id=task_id)
+            result = await agent.run(conn, task_id, text, rooms=rooms, event_id=event_id, conversation_id=conversation_id)
+            if event_id:
+                conn.execute("UPDATE conversation_inputs SET task_id=? WHERE id=?", (result["id"], event_id))
+            return result
+        try:
+            room = await rooms.try_handle(board_id, text, person, event_id=event_id, conversation_id=conversation_id)
+        except RoomMessageConflict as error:
+            raise HTTPException(409, str(error)) from error
+        if room is not None:
+            return room
         task_id = agent.start_task(conn, board_id, person or config.GUEST.name, text)
         return await agent.run(conn, task_id, text)
 
@@ -158,10 +203,14 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             "people": [p.__dict__ for p in config.PEOPLE.values()],
         }
 
+    def conversation_result(task):
+        from office.conversation import task_result
+        return task_result(conn, task["id"], rooms)
+
     @app.get("/api/state")
     async def state():
         return {
-            "tasks": [procurement_workflow.enrich_task(conn, db.task_view(t)) for t in db.rows(conn, "SELECT * FROM tasks ORDER BY created_at DESC LIMIT 100")],
+            "tasks": [conversation_result(t) for t in db.rows(conn, "SELECT * FROM tasks ORDER BY created_at DESC LIMIT 100")],
             "orders": db.rows(conn, "SELECT * FROM orders ORDER BY created_at DESC"),
             "tickets": db.rows(conn, "SELECT * FROM tickets ORDER BY created_at DESC"),
             "commands": {c["board_id"]: c for c in db.rows(conn, "SELECT * FROM board_commands")},
@@ -181,7 +230,13 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         if not text or not text.strip():
             raise HTTPException(400, "Need text or audio")
         async with mutation_lock:
-            return await handle_text(body.board_id, text.strip(), person)
+            return await handle_text(body.board_id, text.strip(), person, body.event_id, body.conversation_id)
+
+    @app.get("/api/room-conversations/{conversation_id}")
+    async def room_conversation(conversation_id: str):
+        if not rooms._load(conversation_id):
+            raise HTTPException(404, "Room conversation not found")
+        return rooms.view(conversation_id)
 
     @app.post("/api/sensor")
     async def sensor(body: Sensor):
@@ -303,7 +358,19 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             elif ev.type == "stock_low":
                 await facilities.prepare_stock_check(task_id, board.id, ev.payload["item_id"], ev.payload.get("simulation", True))
             else:
-                await agent.run(conn,task_id,text)
+                if config.MODEL == "mock":
+                    room = await rooms.try_handle(board.id, text, task_id=task_id, event_id=ev.event_id)
+                    if room is None:
+                        await agent.run(conn, task_id, text, rooms=rooms, event_id=ev.event_id)
+                    elif room["id"] != task_id:
+                        conn.execute("UPDATE device_events SET task_id=? WHERE event_id=?", (room["id"], ev.event_id))
+                        conn.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+                        task_id = room["id"]
+                else:
+                    result = await agent.run(conn, task_id, text, rooms=rooms, event_id=ev.event_id)
+                    if result["id"] != task_id:
+                        conn.execute("UPDATE device_events SET task_id=? WHERE event_id=?", (result["id"], ev.event_id))
+                        task_id = result["id"]
             result = requests_api.response(conn,task_id)
             conn.execute("UPDATE device_events SET response=? WHERE event_id=?", (json.dumps(result),ev.event_id))
             return result

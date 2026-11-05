@@ -21,7 +21,7 @@ from pydantic_ai_harness import Memory, ToolOutputLimits
 from pydantic_ai_harness.memory import InMemoryStore, SqliteMemoryStore
 from pydantic_ai_harness.tool_output_limits import Band, Truncate
 
-from office import brain, bus, config, db, integrations, mock, plugins, procurement_workflow
+from office import brain, bus, config, db, integrations, mock, plugins, procurement_workflow, dispatch
 from pydantic_ai.usage import UsageLimits
 from office.deps import Deps
 
@@ -166,7 +166,8 @@ def start_task(conn, board_id: str, person_name: str, text: str) -> str:
     return task_id
 
 
-async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResults | None = None, *, chat_history=None) -> dict:
+async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResults | None = None,
+              *, chat_history=None, rooms=None, event_id=None, conversation_id=None) -> dict:
     t = db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)
     board = config.BOARDS[t["board_id"]]
     deps = Deps(board=board, person=config.person(t["person"]), task_id=task_id, db=conn)
@@ -174,6 +175,17 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
     _update(conn, task_id, status="running")
 
     try:
+        if config.MODEL == "mock" and prompt is not None and chat_history is None:
+            from office import environment_queries
+            environment = environment_queries.answer(conn, task_id, prompt)
+            if environment is not None:
+                return _update(conn, task_id, status="done", reply=environment["reply"]) | {
+                    "environment": environment["environment"], "trace": environment["trace"],
+                    "command": db.set_command(conn, board.id, environment["reply"], "green")}
+        if config.MODEL != "mock" and prompt is not None:
+            from office import conversation
+            return await conversation.run(conn, task_id, prompt, rooms=rooms,
+                                          event_id=event_id, conversation_id=conversation_id, chat_history=chat_history)
         if chat_history is not None:
             prepared = {"interpretation": {"intent": "conversation", "item_id": None, "quantity": 1,
                 "summary": prompt[:500], "question": None, "assessment": {"severity": "routine", "confidence": 1,
@@ -208,7 +220,17 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
             deferred_tool_results=deferred,
             usage_limits=UsageLimits(request_limit=6, tool_calls_limit=10, total_tokens_limit=16000),
         )
-    except Exception as e:  # demo: surface any failure on the board instead of crashing the request
+    except Exception as e:  # Surface failure without undoing a staged action.
+        if config.MODEL != "mock":
+            current = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
+            room = rooms._load(task_id) if rooms else None
+            if room and room.get("message_id"):
+                bus.publish("conversation.failed", {"task_id": task_id, "error": type(e).__name__})
+                return rooms._update(task_id, room, room["state"], room["reply"])
+            if current["status"] != "running":
+                from office import conversation
+                bus.publish("conversation.failed", {"task_id": task_id, "error": type(e).__name__})
+                return conversation.task_result(conn, task_id, rooms)
         task = _close_failed_run(conn, task_id, f"Sorry, something went wrong: {type(e).__name__}")
         bus.publish("board.say", {"board_id": board.id, "text": task["reply"]})
         color = "green" if task["status"] in {"done", "checkout_ready"} else "red"
@@ -242,6 +264,11 @@ async def decide(conn, task_id: str, approve: bool, proposal_fingerprint: str | 
         from office.oda_food import service
         try:
             return await service(conn).decide(task_id, approve, proposal_fingerprint)
+        except procurement_workflow.ProcurementConflict as error:
+            raise StaleApproval(str(error)) from error
+    if prepared and prepared.get("source") == "validated-need":
+        try:
+            return await dispatch.decide(conn, task_id, approve, proposal_fingerprint)
         except procurement_workflow.ProcurementConflict as error:
             raise StaleApproval(str(error)) from error
     if prepared and prepared.get("source") == "facility-rule":

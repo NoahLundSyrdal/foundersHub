@@ -164,7 +164,7 @@ def create_gateway(backend_url: str = "http://127.0.0.1:3011", dist_path: str | 
         if request.url.query:
             target += "?" + request.url.query
         headers = {key: value for key, value in request.headers.items() if key.lower() in {"accept", "content-type", "last-event-id", "origin"}}
-        client = httpx.AsyncClient(transport=transport, follow_redirects=False, timeout=httpx.Timeout(20, read=None if path == "/api/events" else 20))
+        client = httpx.AsyncClient(transport=transport, follow_redirects=False, timeout=httpx.Timeout(20, read=None if path == "/api/events" else 75))
         try:
             upstream = await client.send(client.build_request(request.method, target, content=bytes(body), headers=headers), stream=True)
             response_headers = {key: value for key, value in upstream.headers.items() if key.lower() in {"content-type", "content-disposition", "retry-after"}}

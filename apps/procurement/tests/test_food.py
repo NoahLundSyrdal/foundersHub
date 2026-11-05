@@ -6,8 +6,9 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 from pydantic_ai.models.test import TestModel
+from pydantic_ai.models.function import FunctionModel
 
-from office_procurement.food import plan_groceries
+from office_procurement.food import FoodPlanningError, plan_groceries
 from office_procurement.models import GroceryNeed
 from office_procurement.worker import run_worker, validate_decision
 from test_worker import request
@@ -34,6 +35,14 @@ def selection(product_id=42, quantity=2, **kwargs):
 
 
 class FoodTests(unittest.IsolatedAsyncioTestCase):
+    async def test_provider_failure_is_not_a_fake_pack_size_question(self):
+        def fail(messages, info):
+            raise RuntimeError("private provider detail")
+        with self.assertRaises(FoodPlanningError) as failure:
+            await plan_groceries(need(), results(), "test", 100, test_model=FunctionModel(fail))
+        self.assertNotIn("private provider detail", str(failure.exception))
+        self.assertNotIn("pack size", str(failure.exception))
+
     async def asyncSetUp(self):
         self.environment = patch.dict(os.environ, {"ANTHROPIC_API_KEY": "", "TAVILY_API_KEY": ""})
         self.environment.start()

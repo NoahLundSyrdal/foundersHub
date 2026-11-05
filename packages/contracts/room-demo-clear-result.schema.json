@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "board_id": {
+      "type": "string",
+      "enum": [
+        "kitchen",
+        "bathroom",
+        "printer"
+      ]
+    },
+    "simulation": {
+      "type": "boolean",
+      "const": true
+    },
+    "cleared": {
+      "type": "boolean"
+    },
+    "dataset_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "samples": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "board_id",
+    "simulation",
+    "cleared",
+    "dataset_id",
+    "samples"
+  ],
+  "additionalProperties": false
+}

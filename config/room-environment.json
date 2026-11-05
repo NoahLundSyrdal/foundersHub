@@ -1,0 +1,18 @@
+{
+  "timezone": "Europe/Oslo",
+  "fresh_seconds": 120,
+  "history_days": 28,
+  "min_history_days": 3,
+  "min_samples_per_day": 3,
+  "min_coverage_minutes": 15,
+  "min_window_coverage_fraction": 0.5,
+  "bin_minutes": 15,
+  "hot_temperature_c": 27,
+  "cold_temperature_c": 18,
+  "humidity_high_pct": 65,
+  "co2_high_ppm": 1200,
+  "usual_hot_fraction": 0.6,
+  "near_term_hours": 2,
+  "max_future_days": 366,
+  "max_meeting_hours": 24
+}
