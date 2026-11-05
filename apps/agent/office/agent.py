@@ -148,6 +148,13 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
 
 async def decide(conn, task_id: str, approve: bool, proposal_fingerprint: str | None = None) -> dict:
     """Resolve the stored pending calls. Args come from the DB, never the client, so approval = exactly what was shown."""
+    prepared = procurement_workflow.get_context(conn, task_id)
+    if prepared and prepared.get("source") == "facility-rule":
+        from office.facility_api import decide_replenishment
+        try:
+            return decide_replenishment(conn, task_id, approve, proposal_fingerprint)
+        except procurement_workflow.ProcurementConflict as error:
+            raise StaleApproval(str(error)) from error
     t = db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)
     if not t or t["status"] != "awaiting_approval":
         raise StaleApproval("Task is not awaiting approval")

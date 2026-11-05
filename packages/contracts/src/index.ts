@@ -183,3 +183,69 @@ export type SensorResponse = {
 export function proposalFingerprint(proposal: Proposal): string {
   return JSON.stringify(proposal);
 }
+
+// Fixed facility rules run in the Python server; the dashboard edits these mappings.
+export const FacilityMetricSchema = z.enum([
+  "co2_ppm", "temperature_c", "humidity_pct", "stock_level", "bin_fill_pct",
+  "obstruction_mm", "noise_level", "tilt_deg", "heartbeat",
+]);
+export const FacilityActionSchema = z.enum(["alert", "ticket", "replenish", "sound"]);
+export const FacilityRuleSchema = z.strictObject({
+  id: z.string().min(1).max(80),
+  title: z.string().min(1).max(120),
+  board_id: StationId,
+  metric: FacilityMetricSchema,
+  enabled: z.boolean(),
+  direction: z.enum(["above", "below", "stale"]),
+  trigger_value: z.number().finite(),
+  reset_value: z.number().finite(),
+  min_samples: z.number().int().min(1).max(10000),
+  min_duration_seconds: z.number().finite().min(0).max(86400),
+  max_gap_seconds: z.number().finite().positive().max(3600),
+  actions: z.array(FacilityActionSchema).min(1).max(4),
+  severity: z.enum(["routine", "urgent", "critical"]),
+  item_id: z.string().min(1).max(128).nullable(),
+  summary: z.string().min(1).max(500),
+});
+export type FacilityRule = z.infer<typeof FacilityRuleSchema>;
+export const FacilityReadingSchema = z.strictObject({
+  event_id: z.string().min(1).max(128),
+  board_id: StationId,
+  metric: FacilityMetricSchema,
+  value: z.number().finite(),
+  timestamp: z.string().datetime({ offset: true }),
+  simulation: z.boolean(),
+});
+export type FacilityReading = z.infer<typeof FacilityReadingSchema>;
+export type FacilityIncident = {
+  id: string; rule_id: string; board_id: z.infer<typeof StationId>;
+  title: string; summary: string; severity: "routine" | "urgent" | "critical";
+  status: "active" | "recovered"; value: number; simulation: boolean;
+  opened_at: string; recovered_at: string | null; acknowledged_at: string | null;
+  actions: z.infer<typeof FacilityActionSchema>[];
+  action_results: Record<string, unknown>;
+};
+export type FacilityState = {
+  rules: FacilityRule[]; incidents: FacilityIncident[]; readings: FacilityReading[];
+  evaluated_at: string;
+};
+
+export const StationActionSchema = z.strictObject({
+  id: z.string().min(1).max(128),
+  incident_id: z.string().min(1).max(128),
+  board_id: StationId,
+  kind: z.literal("sound"),
+  pattern: z.literal("attention"),
+  text: z.string().min(1).max(120),
+  simulation: z.boolean(),
+  state: z.enum(["pending", "dispatched", "delivered", "failed", "cancelled"]),
+  consumer_id: z.string().min(1).max(128).nullable(),
+  created_at: z.string().datetime({ offset: true }),
+  updated_at: z.string().datetime({ offset: true }),
+  detail: z.string().max(500),
+});
+export type StationAction = z.infer<typeof StationActionSchema>;
+export const StationActionClaimSchema = z.strictObject({ consumer_id: z.string().min(1).max(128) });
+export const StationActionAcknowledgementSchema = z.strictObject({
+  status: z.enum(["delivered", "failed"]), detail: z.string().max(500).default(""),
+});
