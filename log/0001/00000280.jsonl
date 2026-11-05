@@ -1,0 +1,1 @@
+{"id":"mw3uxi3n5c83bd7b","member":"noah-lund-syrdal-b43119","lamport":386,"ts":1793901994979,"type":"upsert","kind":"task","key":"claude-conversation-main-merge","data":{"title":"Merge tested open-ended Claude understanding into main","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["NLS/claude-conversation-live","main integration"]},"source":"explicit"}
