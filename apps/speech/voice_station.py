@@ -75,6 +75,7 @@ class Station:
         self.board, self.stt, self.api = board, stt, api
         self.lock = threading.Lock()  # one action at a time on the serial link
         self.press = threading.Event()
+        self.pending: tuple[str, float] | None = None  # (request id, when) of an open clarification question
         self.volume = 0.85
 
     def call(self, key, value="", timeout=3.0):
@@ -197,10 +198,15 @@ class Station:
             answer = air_summary(aq, lang)
         else:
             try:
-                res = post_transcript(self.api, "kitchen", text)
+                pending = self.pending if self.pending and time.time() - self.pending[1] < 180 else None
+                if pending:  # the agent asked a question: this utterance is the answer, not a new case
+                    res = self._post(f"/api/requests/{pending[0]}/transcript", {"text": text[:2000]}) or {}
+                else:
+                    res = post_transcript(self.api, "kitchen", text)
                 print("  API:", str(res)[:300])
                 req = res.get("request") or res
                 status, summary = req.get("status"), req.get("summary", "")
+                self.pending = (req["id"], time.time()) if status == "needs_clarification" and req.get("id") else None
                 if lang == "no":
                     answer = {"awaiting_approval": f"Jeg har laget et forslag: {summary}. Det venter på godkjenning.",
                               "needs_clarification": f"Jeg trenger litt mer informasjon. {req.get('question') or ''}",
