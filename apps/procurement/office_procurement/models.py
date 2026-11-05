@@ -103,7 +103,7 @@ class Research(StrictModel):
     title: str = Field(min_length=1, max_length=200)
     url: HttpUrl
     snippet: str = Field(max_length=1000)
-    source: Literal["tavily"] = "tavily"
+    source: Literal["tavily", "anthropic_web_search"] = "tavily"
     executable: Literal[False] = False
     marketplace: Literal["finn"] | None = None
 

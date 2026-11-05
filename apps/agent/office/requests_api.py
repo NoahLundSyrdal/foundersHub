@@ -165,8 +165,9 @@ def router(conn):
             raise HTTPException(409, "Only maintenance or ordered requests can be resolved")
         conn.execute("UPDATE orders SET status='delivered' WHERE task_id=?", (task_id,))
         conn.execute("UPDATE tickets SET status='resolved' WHERE task_id=?", (task_id,))
-        bus.publish("state.changed", {})
-        bus.publish("requests.updated", {"request_id": task_id})
+        conn.execute("UPDATE tasks SET updated_at=? WHERE id=?", (db.now(), task_id))
+        bus.publish("state.changed", {}, source=conn)
+        bus.publish("requests.updated", {"request_id": task_id}, source=conn)
         return request_view(conn, task_id)
 
     @routes.post("/api/requests/{task_id}/requote")

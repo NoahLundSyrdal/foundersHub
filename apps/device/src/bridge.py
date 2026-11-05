@@ -18,6 +18,37 @@ EVENT_TYPES = ("button_pressed", "speech_transcript", "stock_low")
 DEFAULT_MAPPING = {station: station for station in STATIONS}
 
 
+class SerialLines:
+    """Keep timeout fragments; discard an oversized frame through its newline."""
+
+    def __init__(self, limit: int = 65536):
+        self.limit = limit
+        self.pending = bytearray()
+        self.discarding = False
+        self.discarded = 0
+
+    def feed(self, data: bytes) -> list[bytes]:
+        lines = []
+        parts = data.split(b"\n")
+        for index, part in enumerate(parts):
+            complete = index < len(parts) - 1
+            if complete:
+                part += b"\n"
+            if not self.discarding:
+                if len(self.pending) + len(part) > self.limit:
+                    self.pending.clear()
+                    self.discarding = True
+                    self.discarded += 1
+                else:
+                    self.pending.extend(part)
+            if complete:
+                if not self.discarding:
+                    lines.append(bytes(self.pending))
+                    self.pending.clear()
+                self.discarding = False
+        return lines
+
+
 def make_event(station: str, kind: str, payload: dict | None = None) -> dict:
     return validate_event({
         "event_id": str(uuid4()), "station_id": station, "type": kind,
@@ -195,6 +226,7 @@ def main() -> int:
         with serial.Serial(args.port, args.baud, timeout=1) as port:
             print(f"Listening on {args.port} at {args.baud} baud", file=sys.stderr)
             last_sent: dict[str, dict] = {}
+            lines = SerialLines()
             next_poll = 0.0
             while True:
                 if time.monotonic() >= next_poll:
@@ -203,21 +235,20 @@ def main() -> int:
                 raw = port.readline(65537)
                 if not raw:
                     continue
-                if len(raw) > 65536 or not raw.endswith(b"\n"):
-                    # Drain an overlong line instead of parsing a partial JSON message.
-                    while raw and not raw.endswith(b"\n"):
-                        raw = port.readline(65537)
-                    print("Ignored incomplete or overlong serial line", file=sys.stderr)
-                    continue
-                try:
-                    event = normalize_message(json.loads(raw), mapping)
-                    if event is None:
-                        continue
-                    result = post_event(args.api, event)
-                    send_feedback(port, result, last_sent)
-                    print(json.dumps({"event_id": event["event_id"], "request_id": result["request"]["id"], "duplicate": result["duplicate"]}), flush=True)
-                except (ValueError, RuntimeError, UnicodeDecodeError) as exc:
-                    print(f"Event failed: {exc}", file=sys.stderr)
+                discarded = lines.discarded
+                frames = lines.feed(raw)
+                if lines.discarded != discarded:
+                    print("Ignored overlong serial line", file=sys.stderr)
+                for frame in frames:
+                    try:
+                        event = normalize_message(json.loads(frame), mapping)
+                        if event is None:
+                            continue
+                        result = post_event(args.api, event)
+                        send_feedback(port, result, last_sent)
+                        print(json.dumps({"event_id": event["event_id"], "request_id": result["request"]["id"], "duplicate": result["duplicate"]}), flush=True)
+                    except (ValueError, RuntimeError, UnicodeDecodeError) as exc:
+                        print(f"Event failed: {exc}", file=sys.stderr)
     except KeyboardInterrupt:
         return 0
     except (ValueError, RuntimeError, OSError) as exc:

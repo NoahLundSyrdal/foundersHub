@@ -101,6 +101,10 @@ Hivemind requires Node.js 20+, Git, and an `origin` remote; publishing plan upda
 
 Automatic extraction uses your installed agent's login and subscription or API usage. Set `HIVEMIND_EXTRACTOR_BACKEND=none` in the environment launching your agent to use explicit MCP updates only. `hivemind disable` disables sharing for this clone; `hivemind enable` restores it. See the [upstream guide](https://github.com/Leonhest/hivemind#readme) for details.
 
+The **Facility checks** view retains the local rule editor, simulator and browser chimes. Saved office-twin device layouts from the earlier local interface remain readable when no newer layout exists.
+
+Significant task and facility transitions are available in the durable `/api/feedback` feed. Optional Twilio notifications are disabled by default; see [feedback setup](docs/feedback.md). Supplier discovery uses native Anthropic web search when Tavily is absent and a live Anthropic key is configured; results are unverified discovery links, never executable quotes.
+
 ## Commands
 
 | Command | Purpose |

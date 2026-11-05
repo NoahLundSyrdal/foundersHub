@@ -1,5 +1,14 @@
 # Working on the office assistant
 
+## Team communication
+
+- Use [Hivemind](https://github.com/Leonhest/hivemind) for coordination across this repo's agents. Read the shared plan at session start (`hivemind plan` or the available MCP tools) and check relevant updates before changing shared interfaces.
+- Claim a task before implementation, keep one owner, and update its status when done or blocked. Coordinate overlapping files and changes to `packages/contracts` before editing callers.
+- Publish team-relevant contracts, breaking changes, decisions, blockers, and handoffs through Hivemind. Keep routine progress on the task; use notebook notes for temporary information teammates need.
+- Keep credentials, recordings, personal data, and private model reasoning out of shared entries. Hivemind plan refs have the repository's visibility.
+- Hivemind plan communication is authorized for this repo. This does not authorize pushing code, deployment, supplier execution, spending, or unrelated third-party messages.
+- If Hivemind is unavailable, report that coordination is offline and do not claim teammates received an update. See the README for setup.
+
 ## Ownership
 
 - Keep one integration owner. Hardware owns `apps/device`; agent/speech owns interpretation; procurement owns catalogue and supplier execution; dashboard/integration owns `apps/web` and core API/database.

@@ -94,6 +94,8 @@ infer release transitions from polling.
 - Stock-low events should fire on a threshold transition; configure physical
   calibration and hysteresis before using a real distance sensor.
 
+Serial timeout fragments are retained until a newline, including split UTF-8. Frames over 64 KiB are discarded through their next newline while feedback polling continues. This applies to the legacy raw-serial bridge; the verified Atech SDK path above remains unchanged.
+
 ## Checks
 
 ```sh

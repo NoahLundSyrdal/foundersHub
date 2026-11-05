@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from office import agent, approval_email, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import chat_api, facility_api, oda_food, oda_api, work_api
 from office import alert_rules, order_confirmations, whatsapp_delivery, room_service, room_demo, development, development_api
-from office import temperature_trend
+from office import temperature_trend, feedback
 from office.room_messaging import RoomMessageConflict
 from office.facility_rules import FacilityReading
 from office.speaker import Speaker
@@ -63,6 +63,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
     groceries = oda_food.service(conn)
     mutation_lock = asyncio.Lock()
     facilities = facility_api.FacilityService(conn, mutation_lock)
+    notifications = feedback.FeedbackService(conn, facilities, mutation_lock)
     work = work_api.WorkRuntime(conn, mutation_lock)
     approvals = delivery = None
     if os.getenv("OFFICE_ORDER_PUBLIC_URL") and os.getenv("OFFICE_ORDER_WHATSAPP_TO"):
@@ -92,6 +93,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
 
     @asynccontextmanager
     async def lifespan(app):
+        notifications.start()
         for logger_name in ("uvicorn.access", "uvicorn.error", "httpx"):
             logger = logging.getLogger(logger_name)
             if not any(isinstance(f, order_confirmations.ConfirmationTokenFilter) for f in logger.filters):
@@ -100,6 +102,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
             await facilities.tick()
             work.tick()
         monitor = asyncio.create_task(facilities.watch())
+        feedback_monitor = asyncio.create_task(notifications.watch())
         work_monitor = asyncio.create_task(work.watch())
         approval_monitors = [asyncio.create_task(approvals.watch())] if approvals else []
         if delivery is not None:
@@ -108,14 +111,18 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
         try:
             yield
         finally:
+            notifications.close()
             oda_food.release(conn)
             await approval_email.drain()
             monitor.cancel()
+            feedback_monitor.cancel()
             work_monitor.cancel()
             for pending in approval_monitors:
                 pending.cancel()
             with suppress(asyncio.CancelledError):
                 await monitor
+            with suppress(asyncio.CancelledError):
+                await feedback_monitor
             with suppress(asyncio.CancelledError):
                 await work_monitor
             for pending in approval_monitors:
@@ -126,6 +133,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
     app.state.conn = conn
     app.state.mutation_lock = mutation_lock
     app.state.facilities = facilities
+    app.state.feedback = notifications
     app.state.oda_food = groceries
     app.state.work = work
     app.state.order_confirmations = approvals
@@ -135,6 +143,7 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
     app.state.whatsapp = delivery
     app.include_router(requests_api.router(conn))
     app.include_router(facility_api.router(facilities))
+    app.include_router(feedback.router(notifications))
     app.include_router(oda_api.router(groceries))
     app.include_router(work_api.router(work))
     app.include_router(chat_api.router(conn, mutation_lock, rooms))
@@ -312,14 +321,24 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
 
     @app.post("/api/orders/{order_id}/delivered")
     async def delivered(order_id: str):
-        conn.execute("UPDATE orders SET status = 'delivered' WHERE id = ?", (order_id,))
-        bus.publish("state.changed", {})
+        async with mutation_lock:
+            order = db.row(conn, "SELECT task_id FROM orders WHERE id=?", order_id)
+            if not order:
+                raise HTTPException(404, "Order not found")
+            conn.execute("UPDATE orders SET status = 'delivered' WHERE id = ?", (order_id,))
+            conn.execute("UPDATE tasks SET updated_at=? WHERE id=?", (db.now(), order["task_id"]))
+            bus.publish("state.changed", {}, source=conn)
         return {"ok": True}
 
     @app.post("/api/tickets/{ticket_id}/resolve")
     async def resolve(ticket_id: str):
-        conn.execute("UPDATE tickets SET status = 'resolved' WHERE id = ?", (ticket_id,))
-        bus.publish("state.changed", {})
+        async with mutation_lock:
+            ticket = db.row(conn, "SELECT task_id FROM tickets WHERE id=?", ticket_id)
+            if not ticket:
+                raise HTTPException(404, "Ticket not found")
+            conn.execute("UPDATE tickets SET status = 'resolved' WHERE id = ?", (ticket_id,))
+            conn.execute("UPDATE tasks SET updated_at=? WHERE id=?", (db.now(), ticket["task_id"]))
+            bus.publish("state.changed", {}, source=conn)
         return {"ok": True}
 
     @app.get("/api/events")

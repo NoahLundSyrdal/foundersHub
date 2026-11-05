@@ -149,7 +149,7 @@ async def prepare_need(conn, task_id: str, text: str | None, *, decision: Interp
           ON CONFLICT(request_id) DO UPDATE SET severity=excluded.severity,title=excluded.title,detail=excluded.detail,
           acknowledged_at=CASE WHEN procurement_alerts.severity<>excluded.severity THEN NULL ELSE procurement_alerts.acknowledged_at END""",
                      (task_id, task_id, assessment["severity"], decision["summary"], assessment["reason"], db.now()))
-    bus.publish("requests.updated", {"request_id": task_id})
+    bus.publish("requests.updated", {"request_id": task_id}, source=conn)
     for step in result.progress:
         bus.publish("procurement.progress", {"task_id": task_id, **step.model_dump()})
     return value
@@ -241,7 +241,7 @@ def requote_task(conn, task_id, fingerprint):
     store_context(conn, task_id, value)
     conn.execute("UPDATE tasks SET pending=?,reply=?,updated_at=? WHERE id=?",
                  (json.dumps(pending), "Fresh quote ready for review (simulated).", db.now(), task_id))
-    bus.publish("requests.updated", {"request_id": task_id})
+    bus.publish("requests.updated", {"request_id": task_id}, source=conn)
     from office import approval_email
     approval_email.notify(conn, task_id)  # new fingerprint: the approver may get a fresh email
     return enrich_task(conn, db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)))
@@ -275,5 +275,5 @@ def acknowledge_alert(conn, alert_id):
     if not alert:
         raise ProcurementConflict("Alert not found.")
     conn.execute("UPDATE procurement_alerts SET acknowledged_at=COALESCE(acknowledged_at,?) WHERE id=?", (db.now(), alert_id))
-    bus.publish("requests.updated", {"request_id": alert["request_id"]})
+    bus.publish("requests.updated", {"request_id": alert["request_id"]}, source=conn)
     return db.row(conn, "SELECT * FROM procurement_alerts WHERE id=?", alert_id)

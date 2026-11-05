@@ -40,7 +40,7 @@ People hand you tasks by voice. Your job is to make things happen with zero fric
 - Record requests about missing furniture or supplies outside the approved catalogue with create_ticket; do not force them into a printer/kitchen catalogue.
 - Before purchasing, call prepare_purchase_request with the concrete need and appropriate configured location. This validates scope and prices, not approval.
 - Ask a question only if you truly cannot act.
-- Your final reply is spoken aloud and shown on a tiny screen: ONE short sentence, max ~20 words.
+- Your final reply is spoken aloud and shown on a tiny screen: ONE sentence, at most 12 words.
 - Orders are simulated in this demo. When you order something, say it was ordered (simulated).
 - Never invent products or prices; use the catalogue tools.
 - Follow the company brain's procedures (lookup_procedure) when deciding how to handle something.
@@ -108,8 +108,8 @@ def _update(conn, task_id: str, **fields) -> dict:
     sets = ", ".join(f"{k} = ?" for k in fields)
     conn.execute(f"UPDATE tasks SET {sets} WHERE id = ?", (*fields.values(), task_id))
     task = procurement_workflow.enrich_task(conn, db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)))
-    bus.publish("task.updated", task)
-    bus.publish("requests.updated", {"request_id": task_id})
+    bus.publish("task.updated", task, source=conn)
+    bus.publish("requests.updated", {"request_id": task_id}, source=conn)
     return task
 
 
