@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   proposalFingerprint,
   type DeviceEvent,
@@ -6,7 +6,10 @@ import {
   type OfficeRequest,
   type Station,
 } from "@office/contracts";
+import { AgentStage } from "./AgentStage";
 import { api } from "./api";
+import { isMerged, money, requestTitle, stamp } from "./format";
+import { HistoryView } from "./HistoryView";
 
 type Health = {
   agent_provider: string;
@@ -28,11 +31,6 @@ type Recognition = {
   stop: () => void;
 };
 type RecognitionConstructor = new () => Recognition;
-const stationIcons: Record<string, string> = {
-  kitchen: "☕",
-  bathroom: "◉",
-  printer: "▤",
-};
 const statusLabels: Record<string, string> = {
   processing: "Agent working",
   awaiting_input: "Waiting for details",
@@ -43,17 +41,6 @@ const statusLabels: Record<string, string> = {
   resolved: "Resolved",
   failed: "Failed",
 };
-const money = (value: number) =>
-  new Intl.NumberFormat("en-NO", {
-    style: "currency",
-    currency: "NOK",
-    maximumFractionDigits: 0,
-  }).format(value);
-const stamp = (value: string) =>
-  new Date(value).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 export function App() {
   const [stations, setStations] = useState<Station[]>([]),
@@ -66,18 +53,46 @@ export function App() {
     [notice, setNotice] = useState(""),
     [connectionError, setConnectionError] = useState(""),
     [listening, setListening] = useState(false),
-    [streamConnected, setStreamConnected] = useState(false);
+    [streamConnected, setStreamConnected] = useState(false),
+    [view, setView] = useState<"desk" | "history">("desk"),
+    [followed, setFollowed] = useState<string | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const refreshSequence = useRef(0);
   const active = requests.find((request) => request.id === selected);
+  const open = requests.filter(
+    (r) => !["ordered", "resolved"].includes(r.status),
+  );
+  const newestOf = (list: OfficeRequest[]) =>
+    list.reduce<OfficeRequest | undefined>(
+      (newest, r) => (!newest || r.created_at > newest.created_at ? r : newest),
+      undefined,
+    );
+  const newest = newestOf(requests.filter((r) => !isMerged(r)));
+  // Hold the screen while someone is working on a request, so a new one can
+  // never swap the approval or the form under their hands.
+  const holding =
+    listening || !!text.trim() || (!!active && open.includes(active));
+  const unseen =
+    followed !== null && newest && newest.created_at > followed
+      ? newest
+      : undefined;
+  const waitingToOpen = unseen?.id === selected ? undefined : unseen;
   useEffect(() => {
-    if (selected === null) {
-      const incoming = requests.find(
-        (request) => request.status === "awaiting_input",
-      );
-      if (incoming) setSelected(incoming.id);
+    if (!health) return;
+    if (followed === null) {
+      setFollowed(newest?.created_at ?? "");
+      setSelected(newestOf(open)?.id ?? null);
+    } else if (unseen && (unseen.id === selected || !holding)) {
+      setFollowed(unseen.created_at);
+      setSelected(unseen.id);
     }
-  }, [requests, selected]);
+  });
+  function openRequest(id: string) {
+    setSelected(id);
+    setText("");
+    setNotice("");
+    setView("desk");
+  }
   const SpeechRecognition =
     (
       window as unknown as {
@@ -163,9 +178,7 @@ export function App() {
     setSelected(result.request.id);
     setText("");
     setNotice(
-      result.duplicate
-        ? "Already reported. Opened the existing request."
-        : result.command.text,
+      result.duplicate ? "Already reported. Opened the existing request." : "",
     );
   }
   function press(station: Station) {
@@ -223,206 +236,321 @@ export function App() {
       setError("Could not start the microphone. Type the request instead.");
     }
   }
-  const open = requests.filter(
-    (r) => !["ordered", "resolved"].includes(r.status),
-  );
+  const waitingOnYou = requests.filter(
+    (r) => r.status === "awaiting_approval",
+  ).length;
+  const handled = requests.length - open.length;
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <a className="brand" href="/" aria-label="Office home">
-          <span className="brand-mark">
-            o<span />
-          </span>
-          office<span className="brand-dot">.</span>
-        </a>
-        <div className="workspace">
-          <span className="avatar">FH</span>
-          <div>
-            Founders Hub<small>Demo workspace</small>
+    <div className="desk">
+      <h1 className="sr-only">Office operations desk</h1>
+      <AgentStage
+        request={active}
+        stationName={stations.find((s) => s.id === active?.station_id)?.name}
+        provider={health?.agent_provider}
+        offline={!!connectionError}
+      />
+      <main className="work">
+        {connectionError && (
+          <div role="alert" className="alert error">
+            Backend unavailable: {connectionError}. Start the API with{" "}
+            <code>npm run dev:server</code>.
           </div>
-          <span className="chevron">⌄</span>
-        </div>
-        <div className="nav-label">WORKSPACE</div>
-        <div className="nav-item selected">
-          <span>▦</span>Operations desk
-          <span className="nav-count">{open.length}</span>
-        </div>
-        <div className="sidebar-note">
-          <span className="small-orb" /> ONE PLACE FOR THE LITTLE THINGS
-          <p>From “we’re out” to “it’s handled.”</p>
-        </div>
-        <div className="sidebar-bottom">
-          <span className="avatar small">4</span>
-          <div>
-            Built together<small>Founders Hub × DNB</small>
+        )}
+        {error && (
+          <div role="alert" className="alert error">
+            {error}
           </div>
-        </div>
-      </aside>
-      <main>
-        <header className="topbar">
-          <span>
-            Workspace <span className="slash">/</span> Operations desk
-          </span>
-          <span className="local-tag">
-            <i /> Local development
-          </span>
-        </header>
-        <div className="content">
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">YOUR OFFICE, TAKEN CARE OF</div>
-              <h1>
-                Operations desk<span>.</span>
-              </h1>
-              <p>Small requests. Clear ownership. Nothing forgotten.</p>
-            </div>
-            <div className="mode-badge">
-              <span>◈</span>
-              <div>
-                Simulation mode<small>No purchases or bookings are made</small>
-              </div>
-            </div>
+        )}
+        {notice && (
+          <div role="status" className="alert success">
+            {notice}
           </div>
-          {connectionError && (
-            <div role="alert" className="alert error">
-              Backend unavailable: {connectionError}. Start the API with{" "}
-              <code>npm run dev:server</code>.
-            </div>
-          )}
-          {error && (
-            <div role="alert" className="alert error">
-              {error}
-            </div>
-          )}
-          {notice && (
-            <div role="status" className="alert success">
-              {notice}
-            </div>
-          )}
-          <section className="stats" aria-label="Request overview">
-            <div>
-              <span>Open requests</span>
-              <strong>{open.length.toString().padStart(2, "0")}</strong>
-              <small>Across all stations</small>
-            </div>
-            <div>
-              <span>Awaiting approval</span>
-              <strong>
-                {requests
-                  .filter((r) => r.status === "awaiting_approval")
-                  .length.toString()
-                  .padStart(2, "0")}
-              </strong>
-              <small>Your next move</small>
-            </div>
-            <div>
-              <span>Handled</span>
-              <strong>
-                {requests
-                  .filter((r) => ["ordered", "resolved"].includes(r.status))
-                  .length.toString()
-                  .padStart(2, "0")}
-              </strong>
-              <small>Simulated orders + resolved issues</small>
-            </div>
-          </section>
-          <div className="section-heading">
-            <div>
-              <h2>Your stations</h2>
-              <p>Press a button to start a request from that location.</p>
-            </div>
-            <span className="quiet-label">HARDWARE SIMULATOR</span>
-          </div>
-          <section className="stations" aria-label="Station simulator">
-            {stations.map((station) => (
-              <button
-                className="station"
-                key={station.id}
-                disabled={busy || listening}
-                onClick={() => press(station)}
-              >
-                <div className="station-top">
-                  <span className="station-icon">
-                    {stationIcons[station.id]}
-                  </span>
-                  <span className="online">
-                    <i /> Virtual station
-                  </span>
-                </div>
-                <h3>{station.name}</h3>
-                <p>{station.equipment.join(" · ")}</p>
-                <div className="station-bottom">
-                  <span>Press to report</span>
-                  <span className="physical-button" aria-hidden="true">
-                    ↗
-                  </span>
-                </div>
-              </button>
-            ))}
-          </section>
-          <div className="sensor-row">
-            <div>
-              <span className="sensor-icon">⌁</span>
-              <div>
-                <strong>Automatic stock detection</strong>
-                <p>
-                  Simulate a bathroom sensor reporting 15% toilet paper
-                  remaining.
-                </p>
-              </div>
-            </div>
+        )}
+        {waitingToOpen && (
+          <div role="status" className="new-request">
+            <span>
+              New request from{" "}
+              {stations.find((s) => s.id === waitingToOpen.station_id)?.name ??
+                waitingToOpen.station_id}
+              : {requestTitle(waitingToOpen)}
+            </span>
             <button
               className="secondary"
               disabled={busy || listening}
-              onClick={stockLow}
+              onClick={() => openRequest(waitingToOpen.id)}
             >
-              Trigger low stock <span>↗</span>
+              Open
             </button>
           </div>
-          <div className="request-layout">
-            <section className="panel queue">
-              <div className="panel-heading">
-                <div>
-                  <h2>Request queue</h2>
-                  <p>Everything coming in, in one place.</p>
+        )}
+        <nav className="views" aria-label="Views">
+          <button
+            aria-pressed={view === "desk"}
+            disabled={listening}
+            onClick={() => setView("desk")}
+          >
+            Desk
+          </button>
+          <button
+            aria-pressed={view === "history"}
+            disabled={listening}
+            onClick={() => setView("history")}
+          >
+            History
+          </button>
+        </nav>
+        {view === "history" ? (
+          <HistoryView
+            requests={requests}
+            stations={stations}
+            statusLabels={statusLabels}
+            disabled={busy || listening}
+            onOpen={openRequest}
+          />
+        ) : (
+          <>
+            <section aria-label="Station simulator">
+              <div className="section-head">
+                <h2>Stations</h2>
+                <span>Simulated hardware</span>
+              </div>
+              <div className="stations">
+                {stations.map((station) => (
+                  <button
+                    className="station"
+                    key={station.id}
+                    disabled={busy || listening}
+                    onClick={() => press(station)}
+                  >
+                    <StationIcon id={station.id} />
+                    <strong>{station.name}</strong>
+                    <small>{station.equipment.join(" · ")}</small>
+                  </button>
+                ))}
+              </div>
+              <button
+                className="text-button"
+                disabled={busy || listening}
+                onClick={stockLow}
+              >
+                Simulate the bathroom sensor at 15% toilet paper
+              </button>
+            </section>
+            {active && (
+              <section className="request" aria-label="Request details">
+                <div className="section-head">
+                  <h2>{requestTitle(active)}</h2>
+                  <span>
+                    {statusLabels[active.status] ?? active.status}
+                  </span>
                 </div>
-                <span className="count">{requests.length}</span>
+                {active.original_text && (
+                  <blockquote>“{active.original_text}”</blockquote>
+                )}
+                {active.question && <p className="question">{active.question}</p>}
+                {(["awaiting_input", "needs_clarification"].includes(
+                  active.status,
+                ) ||
+                  (active.status === "failed" && !active.proposal)) && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      submit();
+                    }}
+                  >
+                    <label htmlFor="transcript">What’s missing or broken?</label>
+                    <textarea
+                      id="transcript"
+                      value={text}
+                      maxLength={2000}
+                      onChange={(e) => setText(e.target.value)}
+                      placeholder={
+                        active.station_id === "kitchen"
+                          ? "We’re out of coffee"
+                          : active.station_id === "bathroom"
+                            ? "We need more paper"
+                            : "The printer is broken"
+                      }
+                      disabled={busy}
+                    />
+                    <div className="form-actions">
+                      <button
+                        type="submit"
+                        className="primary"
+                        disabled={busy || listening || !text.trim()}
+                      >
+                        {busy ? "Sending…" : "Send request"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={!SpeechRecognition || busy}
+                        onClick={() =>
+                          listening ? recognition.current?.stop() : startSpeech()
+                        }
+                      >
+                        {listening ? "Stop listening" : "Use microphone"}
+                      </button>
+                    </div>
+                    <p className="hint">
+                      {SpeechRecognition
+                        ? "Your browser’s speech service may process the audio. Check the text before sending."
+                        : "This browser has no speech recognition. Type your request instead."}
+                    </p>
+                  </form>
+                )}
+                {active.proposal && (
+                  <div className="proposal">
+                    <h3>{active.proposal.product.name}</h3>
+                    <dl>
+                      <div>
+                        <dt>Supplier</dt>
+                        <dd>{active.proposal.product.supplier}</dd>
+                      </div>
+                      <div>
+                        <dt>Quantity</dt>
+                        <dd>{active.proposal.quantity}</dd>
+                      </div>
+                      <div>
+                        <dt>Delivery</dt>
+                        <dd>{active.proposal.product.delivery_estimate}</dd>
+                      </div>
+                      <div className="total">
+                        <dt>Total</dt>
+                        <dd>{money(active.proposal.total_nok)}</dd>
+                      </div>
+                    </dl>
+                    {active.status === "awaiting_approval" && (
+                      <button
+                        className="primary full"
+                        disabled={busy}
+                        onClick={() =>
+                          void perform(async () => {
+                            await api<OfficeRequest>(
+                              `/requests/${active.id}/approve`,
+                              {
+                                proposal_fingerprint: proposalFingerprint(
+                                  active.proposal!,
+                                ),
+                              },
+                            );
+                            setNotice(
+                              "Simulated order confirmed. No money was spent.",
+                            );
+                          })
+                        }
+                      >
+                        {busy ? "Processing…" : "Approve simulated order"}
+                      </button>
+                    )}
+                    <p className="hint">
+                      Demo catalogue and estimated delivery. This does not place a
+                      real order.
+                    </p>
+                  </div>
+                )}
+                {active.status === "failed" && active.proposal && (
+                  <div className="alert error">
+                    Order outcome uncertain. Check the supplier and reconcile this
+                    request before attempting another purchase. Retrying is
+                    disabled.
+                  </div>
+                )}
+                {active.status === "ordered" && (
+                  <button
+                    className="primary full"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(async () => {
+                        await api<OfficeRequest>(
+                          `/requests/${active.id}/resolve`,
+                          {},
+                        );
+                        setNotice(
+                          "Simulated delivery confirmed. A new purchase can now be requested.",
+                        );
+                      })
+                    }
+                  >
+                    Confirm simulated delivery
+                  </button>
+                )}
+                {active.assigned_to && (
+                  <p className="fact">
+                    <span>Assigned to</span> {active.assigned_to}
+                  </p>
+                )}
+                {active.status === "maintenance_open" && (
+                  <button
+                    className="primary full"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(async () => {
+                        await api<OfficeRequest>(
+                          `/requests/${active.id}/resolve`,
+                          {},
+                        );
+                        setNotice("Maintenance request marked resolved.");
+                      })
+                    }
+                  >
+                    Mark resolved
+                  </button>
+                )}
+                {active.supplier_reference && (
+                  <p className="fact">
+                    <span>Simulated reference</span>{" "}
+                    <code>{active.supplier_reference}</code>
+                  </p>
+                )}
+                <p className="fact">
+                  <span>Requester</span>{" "}
+                  {active.user_id ?? "Unknown, no speaker identification"}
+                </p>
+                {active.trace && active.trace.length > 0 && (
+                  <details className="log">
+                    <summary>All steps ({active.trace.length})</summary>
+                    <ol>
+                      {active.trace.map((entry, index) => (
+                        <li key={`${entry.at}-${index}`}>
+                          <time dateTime={entry.at}>{stamp(entry.at)}</time>
+                          <span>{entry.detail}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
+              </section>
+            )}
+            <section aria-label="Request queue">
+              <div className="section-head">
+                <h2>Requests</h2>
+                <span className="tally">
+                  {open.length} open · {waitingOnYou} to approve · {handled} handled
+                </span>
               </div>
               {requests.length === 0 ? (
-                <div className="empty">
-                  <span>↗</span>
-                  <h3>A quiet office. For now.</h3>
-                  <p>
-                    Press a station button or trigger the sensor to see your
-                    first request here.
-                  </p>
-                </div>
+                <p className="empty">Nothing yet. Press a station to start one.</p>
               ) : (
-                <div className="request-list">
+                <div className="queue">
                   {requests.map((request) => (
                     <button
                       key={request.id}
-                      className={`request-row ${selected === request.id ? "active" : ""}`}
+                      className={`row ${selected === request.id ? "active" : ""}`}
+                      aria-pressed={selected === request.id}
                       disabled={busy || listening}
-                      onClick={() => {
-                        setSelected(request.id);
-                        setText("");
-                        setNotice("");
-                      }}
+                      onClick={() => openRequest(request.id)}
                     >
-                      <span className="request-icon">
-                        {stationIcons[request.station_id]}
+                      <i className={`dot dot-${request.status}`} aria-hidden="true" />
+                      <span className="row-main">
+                        <strong>{requestTitle(request)}</strong>
+                        <small>
+                          {stations.find((s) => s.id === request.station_id)?.name ??
+                            request.station_id}{" "}
+                          · {stamp(request.created_at)}
+                        </small>
                       </span>
-                      <div className="request-summary">
-                        <strong>{request.summary || "New request"}</strong>
-                        <span>
-                          {stations.find((s) => s.id === request.station_id)
-                            ?.name ?? request.station_id}{" "}
-                          <span className="separator">·</span>{" "}
-                          {stamp(request.created_at)}
-                        </span>
-                      </div>
-                      <span className={`status status-${request.status}`}>
+                      <span className="row-status">
                         {statusLabels[request.status] ?? request.status}
                       </span>
                     </button>
@@ -430,259 +558,63 @@ export function App() {
                 </div>
               )}
             </section>
-            <section className="panel detail" aria-label="Request details">
-              <div className="panel-heading">
-                <h2>{active ? "Request details" : "Ready when you are"}</h2>
-                <span className="detail-icon">↗</span>
-              </div>
-              {!active ? (
-                <div className="empty detail-empty">
-                  <span>◎</span>
-                  <h3>Give the office a voice.</h3>
-                  <p>
-                    Select a station, tell us what’s needed, and follow the
-                    request through approval.
-                  </p>
-                </div>
-              ) : (
-                <div className="detail-content">
-                  <div className="detail-location">
-                    <span>{stationIcons[active.station_id]}</span>
-                    <div>
-                      <strong>
-                        {stations.find((s) => s.id === active.station_id)
-                          ?.name ?? active.station_id}
-                      </strong>
-                      <small>
-                        Requester:{" "}
-                        {active.user_id ??
-                          "Unknown · no speaker identification"}
-                      </small>
-                    </div>
-                  </div>
-                  <span className={`status status-${active.status}`}>
-                    {statusLabels[active.status]}
-                  </span>
-                  <h3 className="detail-title">{active.summary}</h3>
-                  {active.original_text && (
-                    <blockquote>“{active.original_text}”</blockquote>
-                  )}
-                  {active.question && (
-                    <div className="question">{active.question}</div>
-                  )}
-                  {(["awaiting_input", "needs_clarification"].includes(
-                    active.status,
-                  ) ||
-                    (active.status === "failed" && !active.proposal)) && (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        submit();
-                      }}
-                    >
-                      <label htmlFor="transcript">
-                        What’s missing or broken?
-                      </label>
-                      <textarea
-                        id="transcript"
-                        value={text}
-                        maxLength={2000}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder={
-                          active.station_id === "kitchen"
-                            ? "e.g. We’re out of coffee"
-                            : active.station_id === "bathroom"
-                              ? "e.g. We need more paper"
-                              : "e.g. The printer is broken"
-                        }
-                        disabled={busy}
-                      />
-                      <div className="input-actions">
-                        <button
-                          type="button"
-                          className="secondary"
-                          disabled={!SpeechRecognition || busy}
-                          onClick={() =>
-                            listening
-                              ? recognition.current?.stop()
-                              : startSpeech()
-                          }
-                        >
-                          {listening ? "■ Stop listening" : "◉ Use microphone"}
-                        </button>
-                        <button
-                          type="submit"
-                          className="primary"
-                          disabled={busy || listening || !text.trim()}
-                        >
-                          {busy ? "Working…" : "Send request →"}
-                        </button>
-                      </div>
-                      <p className="hint">
-                        {SpeechRecognition
-                          ? "Optional browser speech recognition; audio may be processed by your browser’s speech service. Review the text before sending."
-                          : "Speech recognition is unavailable in this browser. Type your request to continue."}
-                      </p>
-                    </form>
-                  )}
-                  {active.status === "processing" && (
-                    <div role="status" className="processing-note">
-                      <span className="processing-orb" /> Agent is checking the
-                      request and preparing the next action…
-                    </div>
-                  )}
-                  {active.trace && active.trace.length > 0 && (
-                    <section className="activity" aria-label="Agent activity">
-                      <h4>Activity</h4>
-                      <ol>
-                        {active.trace.map((entry, index) => (
-                          <li key={`${entry.at}-${index}`}>
-                            <span className="activity-dot" />
-                            <div>
-                              <strong>
-                                {entry.stage.replaceAll("_", " ")}
-                              </strong>
-                              <p>{entry.detail}</p>
-                            </div>
-                            <time dateTime={entry.at}>{stamp(entry.at)}</time>
-                          </li>
-                        ))}
-                      </ol>
-                    </section>
-                  )}
-                  {active.proposal && (
-                    <div className="proposal">
-                      <div className="proposal-eyebrow">
-                        PROPOSED PURCHASE · SIMULATED
-                      </div>
-                      <h4>{active.proposal.product.name}</h4>
-                      <dl>
-                        <div>
-                          <dt>Supplier</dt>
-                          <dd>{active.proposal.product.supplier}</dd>
-                        </div>
-                        <div>
-                          <dt>Quantity</dt>
-                          <dd>{active.proposal.quantity}</dd>
-                        </div>
-                        <div>
-                          <dt>Delivery</dt>
-                          <dd>{active.proposal.product.delivery_estimate}</dd>
-                        </div>
-                        <div className="total">
-                          <dt>Total</dt>
-                          <dd>{money(active.proposal.total_nok)}</dd>
-                        </div>
-                      </dl>
-                      {active.status === "awaiting_approval" && (
-                        <button
-                          className="primary full"
-                          disabled={busy}
-                          onClick={() =>
-                            void perform(async () => {
-                              await api<OfficeRequest>(
-                                `/requests/${active.id}/approve`,
-                                {
-                                  proposal_fingerprint: proposalFingerprint(
-                                    active.proposal!,
-                                  ),
-                                },
-                              );
-                              setNotice(
-                                "Simulated order confirmed. No money was spent.",
-                              );
-                            })
-                          }
-                        >
-                          {busy ? "Processing…" : "Approve simulated order →"}
-                        </button>
-                      )}
-                      <p className="hint">
-                        Demo catalogue and estimated delivery. This does not
-                        place a real order.
-                      </p>
-                    </div>
-                  )}
-                  {active.status === "failed" && active.proposal && (
-                    <div className="alert error">
-                      Order outcome uncertain. Check the supplier and reconcile
-                      this request before attempting another purchase. Retrying
-                      is disabled.
-                    </div>
-                  )}
-                  {active.status === "ordered" && (
-                    <button
-                      className="primary full"
-                      disabled={busy}
-                      onClick={() =>
-                        void perform(async () => {
-                          await api<OfficeRequest>(
-                            `/requests/${active.id}/resolve`,
-                            {},
-                          );
-                          setNotice(
-                            "Simulated delivery confirmed. A new purchase can now be requested.",
-                          );
-                        })
-                      }
-                    >
-                      Confirm simulated delivery ✓
-                    </button>
-                  )}
-                  {active.assigned_to && (
-                    <div className="assignment">
-                      <span>Assigned to</span>
-                      <strong>{active.assigned_to}</strong>
-                    </div>
-                  )}
-                  {active.status === "maintenance_open" && (
-                    <button
-                      className="primary full"
-                      disabled={busy}
-                      onClick={() =>
-                        void perform(async () => {
-                          await api<OfficeRequest>(
-                            `/requests/${active.id}/resolve`,
-                            {},
-                          );
-                          setNotice("Maintenance request marked resolved.");
-                        })
-                      }
-                    >
-                      Mark resolved ✓
-                    </button>
-                  )}
-                  {active.supplier_reference && (
-                    <div className="confirmation">
-                      <strong>✓ Simulated confirmation</strong>
-                      <code>{active.supplier_reference}</code>
-                      <p>No real order was placed.</p>
-                    </div>
-                  )}
-                  <div className="request-id">
-                    REQUEST {active.id.slice(0, 8).toUpperCase()}
-                  </div>
-                </div>
-              )}
-            </section>
-          </div>
-          <footer>
-            <span>
-              <i className={connectionError ? "offline-dot" : "live-dot"} />{" "}
-              {connectionError
-                ? "Disconnected"
-                : streamConnected
-                  ? "Live updates connected"
-                  : "Reconnecting live updates · checks every 5s"}
-            </span>
-            <span>
-              Agent: {health?.agent_provider ?? "…"}{" "}
-              <span className="separator">·</span> Supplier:{" "}
-              {health?.supplier_provider ?? "…"}
-            </span>
-          </footer>
-        </div>
+          </>
+        )}
+        <footer>
+          <span>
+            {connectionError
+              ? "Disconnected"
+              : streamConnected
+                ? "Live updates connected"
+                : "Reconnecting, checking every 5 seconds"}
+          </span>
+          <span>
+            Agent: {health?.agent_provider ?? "…"} · Supplier:{" "}
+            {health?.supplier_provider ?? "…"}
+          </span>
+        </footer>
       </main>
     </div>
+  );
+}
+
+function StationIcon({ id }: { id: string }) {
+  const paths: Record<string, ReactNode> = {
+    kitchen: (
+      <>
+        <path d="M5 9h12v6a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V9Z" />
+        <path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17" />
+        <path d="M9 3v2.5M13 3v2.5" />
+      </>
+    ),
+    bathroom: (
+      <>
+        <ellipse cx="8" cy="9" rx="4" ry="5" />
+        <ellipse cx="8" cy="9" rx="1.25" ry="1.75" />
+        <path d="M8 4h9c2.2 0 4 2.2 4 5v11h-9" />
+        <path d="M12 9v11" />
+      </>
+    ),
+    printer: (
+      <>
+        <path d="M7 8V3h10v5" />
+        <path d="M7 17H4V8h16v9h-3" />
+        <path d="M7 14h10v7H7z" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      className="station-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[id]}
+    </svg>
   );
 }
