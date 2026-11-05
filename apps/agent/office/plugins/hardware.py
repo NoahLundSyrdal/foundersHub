@@ -13,7 +13,7 @@ toolset = FunctionToolset()
 
 
 @toolset.tool
-def show_message(ctx: RunContext[Deps], board_id: str, text: str, color: Literal["blue", "amber", "green", "red"] = "blue") -> str:
+async def show_message(ctx: RunContext[Deps], board_id: str, text: str, color: Literal["blue", "amber", "green", "red"] = "blue") -> str:
     """Show a short message on another board's screen/lights, e.g. to tell the kitchen something."""
     board = config.BOARDS.get(board_id)
     if not board:

@@ -12,6 +12,7 @@ import { isMerged, money, requestTitle, stamp } from "./format";
 import { HistoryView } from "./HistoryView";
 import { OfficeTwin } from "./OfficeTwin";
 import { ProcurementAlerts } from "./ProcurementAlerts";
+import WorkQueue from "./WorkQueue";
 
 type Health = {
   agent_provider?: string;
@@ -58,7 +59,7 @@ export function App() {
     [connectionError, setConnectionError] = useState(""),
     [listening, setListening] = useState(false),
     [streamConnected, setStreamConnected] = useState(false),
-    [view, setView] = useState<"desk" | "history" | "twin">("twin"),
+    [view, setView] = useState<"desk" | "history" | "twin" | "work">("twin"),
     [followed, setFollowed] = useState<string | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const refreshSequence = useRef(0);
@@ -306,6 +307,13 @@ export function App() {
         )}
         <nav className="views" aria-label="Views">
           <button
+            aria-pressed={view === "work"}
+            disabled={listening}
+            onClick={() => setView("work")}
+          >
+            Work
+          </button>
+          <button
             aria-pressed={view === "twin"}
             disabled={listening}
             onClick={() => setView("twin")}
@@ -328,7 +336,9 @@ export function App() {
           </button>
         </nav>
         <ProcurementAlerts />
-        {view === "twin" ? (
+        {view === "work" ? (
+          <WorkQueue onOpenRequest={openRequest} />
+        ) : view === "twin" ? (
           <OfficeTwin
             stations={stations}
             requests={requests}

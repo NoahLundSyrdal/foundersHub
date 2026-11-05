@@ -52,7 +52,7 @@ office_agent = Agent(
 
 
 @office_agent.instructions
-def context(ctx: RunContext[Deps]) -> str:
+async def context(ctx: RunContext[Deps]) -> str:
     b, p = ctx.deps.board, ctx.deps.person
     others = ", ".join(f"{x.id} ({x.location}: {', '.join(sorted(x.modules))})" for x in config.BOARDS.values())
     return (

@@ -57,11 +57,11 @@ def router(conn):
     routes = APIRouter()
 
     @routes.get("/api/stations")
-    def stations():
+    async def stations():
         return config._load("config/stations.json")
 
     @routes.get("/api/requests")
-    def requests():
+    async def requests():
         return [request_view(conn, t["id"]) for t in db.rows(conn, "SELECT id FROM tasks ORDER BY rowid DESC LIMIT 200")]
 
     @routes.post("/api/requests/{task_id}/transcript")
@@ -97,7 +97,7 @@ def router(conn):
         return request_view(conn, task_id)
 
     @routes.post("/api/requests/{task_id}/resolve")
-    def resolve(task_id: str):
+    async def resolve(task_id: str):
         current = request_view(conn, task_id)
         if current["status"] not in {"ordered", "maintenance_open"}:
             raise HTTPException(409, "Only maintenance or ordered requests can be resolved")

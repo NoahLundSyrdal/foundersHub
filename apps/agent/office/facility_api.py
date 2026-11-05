@@ -54,7 +54,7 @@ def _task_update(conn, task_id, status, reply, pending=None):
 
 def _execute_replenishment(conn, task_id, approved=False):
     # Reuse the sole supplier boundary, including persisted attempts, limits and quote checks.
-    from office.plugins.procurement import place_order
+    from office.plugins.procurement import execute_order
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
     value = workflow.get_context(conn, task_id)
     pending = json.loads(task["pending"])
@@ -62,7 +62,7 @@ def _execute_replenishment(conn, task_id, approved=False):
     ctx = SimpleNamespace(deps=Deps(config.BOARDS[task["board_id"]], config.GUEST, task_id, conn),
                           tool_call_id=call_id, tool_call_approved=approved)
     proposal = value["proposal"]
-    reply = place_order(ctx, proposal["product"]["id"], proposal["quantity"])
+    reply = execute_order(ctx, proposal["product"]["id"], proposal["quantity"])
     order = db.row(conn, "SELECT id FROM orders WHERE task_id=?", task_id)
     return _task_update(conn, task_id, "done" if order else "failed", reply)
 
