@@ -7,3 +7,4 @@ dependencies = []
 
 [project.optional-dependencies]
 usb = ["pyserial>=3.5,<4"]
+atech = ["atech>=1.0.0a12"]  # official SDK: firmware build/flash + Board runtime

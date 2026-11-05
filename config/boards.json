@@ -4,7 +4,7 @@
     "location": "Kitchen",
     "responsible_team": "Facilities",
     "equipment": ["coffee machine", "dishwasher"],
-    "modules": ["button", "screen", "light_grid", "microphone", "distance", "temperature_humidity"],
+    "modules": ["button", "screen", "light_grid", "distance", "temperature_humidity", "co2", "speaker"],
     "triggers": []
   },
   {

@@ -18,7 +18,34 @@ The last command creates an awaiting-input request. Enter a transcript for it in
 the dashboard. Simulation emits one event and prints the API response and device
 feedback command. It does not capture speech, recognise speakers, or program a board.
 
-## USB hardware
+## Real board: atech SDK (use this)
+
+The board runs firmware built with the official `atech` SDK:
+[`firmware/office_station/project.yaml`](firmware/office_station/project.yaml). It is our 14-port
+board as the **kitchen** station; its ports were probed and verified on 2026-11-05 (port map in
+[`docs/hardware.md`](../../docs/hardware.md)). If you move a module, update the YAML and re-upload:
+
+```sh
+uv venv apps/device/.venv && uv pip install --python apps/device/.venv './apps/device[atech]'
+cd apps/device/firmware/office_station
+../../.venv/bin/atech validate . && ../../.venv/bin/atech build . && ../../.venv/bin/atech upload .
+../../.venv/bin/atech check          # which modules answered; output modules need your eyes
+cd - && apps/device/.venv/bin/python apps/device/src/atech_bridge.py
+```
+
+The first build downloads the ESP32 compiler (~2.4 GB, once). `atech_bridge.py` turns
+`btn_<station>` presses into `button_pressed` events (push-to-talk) and posts throttled
+temperature, humidity, CO₂ and distance readings to `/api/sensor`. It also shows each station's latest
+command on the screen (custom `office_say` action) and its colour on `led_<station>_fill`. Only one
+program can hold the port, so stop `atech monitor` first. Verified end to end on the real board on
+2026-11-05: sensors reach `/api/sensor`, agent replies reach the screen and light grid, and a button
+press opens push-to-talk ("Listening..."). The board's microphone is not usable where it sits; use the
+laptop mic.
+
+## USB hardware (legacy raw-serial bridge)
+
+Superseded by `atech_bridge.py` above. Note that SDK firmware sends button presses as `value: 1`,
+which this path ignores.
 
 Use Python 3.10+ and an isolated environment:
 
