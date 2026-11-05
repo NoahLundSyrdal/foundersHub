@@ -393,11 +393,15 @@
   }
 }
 
-.twin-environment { border-top: 1px solid var(--line, #d4d4d4); padding-top: 16px; }
-.twin-environment h3 { margin: 0 0 8px; }
-.twin-environment-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
-.twin-environment-grid > div { min-width: 0; }
-.twin-environment-grid dt { font-size: 12px; }
-.twin-environment-grid dd { margin: 6px 0; font-size: 20px; font-weight: 700; }
-.twin-environment-grid dd small { font-size: 12px; font-weight: 400; }
-.twin-environment-grid span, .twin-environment-grid time { display: block; font-size: 11px; line-height: 1.5; }
+/* Explicit row layout prevents the shared dl styles from compressing metrics. */
+.twin-environment { border-top: 1px solid var(--line, #e5e5e5); padding-top: 20px; }
+.twin-environment h3 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.4px; }
+.twin-environment > .hint { margin: 0 0 16px; font-size: 13px; line-height: 1.5; }
+.twin-environment .twin-environment-grid { display: block; margin: 0; }
+.twin-environment-grid > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 12px; min-width: 0; padding: 14px 0; border-bottom: 1px solid #ededeb; }
+.twin-environment-grid > div:last-child { border-bottom: 0; }
+.twin-environment-grid dt { font-size: 14px; font-weight: 500; color: #55554f; }
+.twin-environment-grid dd { margin: 0; min-width: 0; text-align: right; font-size: 23px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.twin-environment-grid dd small { font-size: 12px; font-weight: 400; color: #6d6d65; }
+.twin-environment-grid .environment-empty { display: inline-block; border-radius: 6px; background: #f4f4f0; padding: 6px 9px; color: #73736c; font-size: 12px; font-weight: 400; }
+.twin-environment-grid .environment-status, .twin-environment-grid time { display: block; margin-top: 4px; color: #73736c; font-size: 11px; font-weight: 400; line-height: 1.4; }
