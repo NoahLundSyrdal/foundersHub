@@ -1,0 +1,1 @@
+{"id":"mw3mumspe742e759","member":"jrg-bergh-c202cb","lamport":38,"ts":1793888424169,"type":"upsert","kind":"task","key":"agent-activity-view","data":{"note":"Agent status panel added at top of Operations desk (apps/web/src/AgentStage.tsx). Web only; no API or contract changes. Not committed yet."},"source":"explicit"}
