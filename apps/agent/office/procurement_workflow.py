@@ -31,6 +31,18 @@ def get_context(conn, task_id):
     return json.loads(row["body"]) if row else None
 
 
+def oda_attempt(conn, task_id):
+    """Inspect persisted cart work without initializing Oda or touching its account."""
+    if not db.row(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='oda_cart_attempts'"):
+        return None
+    return db.row(conn, "SELECT * FROM oda_cart_attempts WHERE task_id=?", task_id)
+
+
+def execution_attempted(conn, task_id):
+    ensure_schema(conn)
+    return bool(db.row(conn, "SELECT 1 FROM procurement_attempts WHERE task_id=?", task_id) or oda_attempt(conn, task_id))
+
+
 def store_context(conn, task_id, value):
     conn.execute("INSERT INTO procurement_context VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET body=excluded.body",
                  (task_id, proposal_fingerprint(value)))
@@ -65,6 +77,8 @@ async def prepare_need(conn, task_id: str, text: str | None):
         if not old:
             raise ProcurementConflict("Stored assessment is missing; create a new request.")
         return old
+    if execution_attempted(conn, task_id):
+        raise ProcurementConflict("Execution was already attempted; reconcile its outcome instead of reinterpreting this task.")
     if old and (old.get("proposal") or (old.get("grocery") or {}).get("proposal")):
         raise ProcurementConflict("This task already has a quote. Create a new request instead of changing an approval.")
     task = db.row(conn, "SELECT * FROM tasks WHERE id=?", task_id)
@@ -152,10 +166,17 @@ def approval_metadata(value, person_name):
 
 def release_quote(conn, task_id):
     """Nothing was attempted, so drop the quote: it must not block the item or look like an order."""
+    if execution_attempted(conn, task_id):
+        return
     value = get_context(conn, task_id)
-    if value and value.get("proposal"):
+    if value:
         value["proposal"] = None
         value.pop("approved_fingerprint", None)
+        grocery = value.get("grocery")
+        if isinstance(grocery, dict) and grocery.get("proposal"):
+            grocery.update(proposal=None, state="failed", cart_url=None,
+                           question="Preparation stopped before any cart update. Submit the request again for a fresh basket.")
+        value["approval_required"] = True
         store_context(conn, task_id, value)
 
 
