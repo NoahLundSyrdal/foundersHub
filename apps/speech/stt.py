@@ -66,7 +66,7 @@ def _wav_bytes(audio: np.ndarray) -> bytes:
 
 
 class SpeechToText:
-    """provider="elevenlabs" (Scribe, cloud, needs ELEVENLABS_API_KEY) or "whisper" (local, offline).
+    """provider="elevenlabs" (Scribe v2, cloud, needs ELEVENLABS_API_KEY) or "whisper" (local, offline).
     provider="auto" uses ElevenLabs when a key exists and falls back to Whisper on any error."""
 
     def __init__(self, model: str = "small", language: str | None = None, provider: str = "auto"):
@@ -74,7 +74,7 @@ class SpeechToText:
         self.whisper_size = model
         self._whisper = None
         self.eleven_key = _load_env_key("ELEVENLABS_API_KEY")
-        self.eleven_model = os.environ.get("ELEVENLABS_STT_MODEL", "scribe_v1")
+        self.eleven_model = os.environ.get("ELEVENLABS_STT_MODEL", "scribe_v2")
         if provider == "auto":
             provider = "elevenlabs" if self.eleven_key else "whisper"
         if provider == "elevenlabs" and not self.eleven_key:
