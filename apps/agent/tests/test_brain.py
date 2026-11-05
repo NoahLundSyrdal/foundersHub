@@ -25,7 +25,7 @@ def say(api, text, board):
 def test_over_cap_order_is_routed_not_refused_and_runs_only_after_approval(api):
     task = say(api, "we need 3 toner", "printer")
     assert task["status"] == "awaiting_approval" and task["proposal"]["total_nok"] > config.OFFICE["max_order_nok"]
-    assert task["approval"] == {"type": "purchase_over_cap", "approver": "Leo", "reason": "Above the office cap of 1000 NOK per order"}
+    assert task["approval"] == {"type": "purchase_over_cap", "approver": "Noah", "reason": "Above the office cap of 1000 NOK per order"}
     assert api.get("/api/state").json()["orders"] == []
     assert api.post(f"/api/tasks/{task['id']}/decide", json={"approve": True}).status_code == 200
     assert len(api.get("/api/state").json()["orders"]) == 1
@@ -35,13 +35,13 @@ def test_over_cap_order_is_routed_not_refused_and_runs_only_after_approval(api):
 def test_service_visit_routes_to_contractor_approver(api):
     task = say(api, "we need a plumber, plumbing service", "bathroom")
     assert task["pending"][0]["details"]["approval_type"] == "contractor"
-    assert task["approval"]["approver"] == "Leo"
+    assert task["approval"]["approver"] == "Noah"
 
 
 def test_dashboard_request_shows_who_approves(api):
     task = say(api, "we need 3 toner", "printer")
     [request] = [r for r in api.get("/api/requests").json() if r["id"] == task["id"]]
-    assert request["approval"]["approver"] == "Leo" and request["approval"]["type"] == "purchase_over_cap"
+    assert request["approval"]["approver"] == "Noah" and request["approval"]["type"] == "purchase_over_cap"
 
 
 def test_approver_comes_from_the_brain(api, monkeypatch):
@@ -56,7 +56,7 @@ def test_routing_reads_markdown_and_notion_tables():
     notion = '<table header-row="true"><tr><td>Approval type</td><td>Approver</td></tr><tr><td>purchase</td><td>Ana</td></tr></table>'
     assert brain.routing(md) == {"purchase": "Ana", "purchase_over_cap": "Bo"}
     assert brain.routing(notion) == {"purchase": "Ana"}
-    assert brain.routing()["purchase_over_cap"] == "Leo"  # the checked-in copy (config/brain/)
+    assert brain.routing()["purchase_over_cap"] == "Noah"  # the checked-in copy (config/brain/)
 
 
 def test_procedures_are_searchable():
@@ -66,7 +66,7 @@ def test_procedures_are_searchable():
 
 def test_brain_api_and_sync_without_notion(api):
     body = api.get("/api/brain").json()
-    assert body["source"] == "config/brain" and body["routing"]["purchase"] == "Leo"
+    assert body["source"] == "config/brain" and body["routing"]["purchase"] == "Noah"
     assert api.post("/api/brain/sync").status_code == 409  # mock mode: no Notion
 
 

@@ -13,17 +13,18 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from office import agent, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
+from office import agent, approval_email, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import chat_api, facility_api, oda_food, oda_api, work_api
 from office import alert_rules, order_confirmations, whatsapp_delivery
 from office.facility_rules import FacilityReading
+from office.speaker import Speaker
 
 
 class Input(BaseModel):
     board_id: str = "office"
     text: str | None = None
     audio_b64: str | None = None  # any format OpenAI transcription accepts
-    person: str | None = None  # dashboard override / already-identified speaker
+    person: str | None = None  # dashboard/device pick; overrides voice ID. Unverified either way
 
 
 class Sensor(BaseModel):
@@ -53,6 +54,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     conn = db.connect(db_path)
     procurement_workflow.ensure_schema(conn)
     agent.recover_interrupted(conn)
+    approval_email.recover(conn)
     groceries = oda_food.service(conn)
     mutation_lock = asyncio.Lock()
     facilities = facility_api.FacilityService(conn, mutation_lock)
@@ -93,6 +95,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             yield
         finally:
             oda_food.release(conn)
+            await approval_email.drain()
             monitor.cancel()
             work_monitor.cancel()
             for pending in approval_monitors:
@@ -128,8 +131,8 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             raise HTTPException(404, f"Unknown board {board_id!r}")
         return config.BOARDS[board_id]
 
-    async def handle_text(board_id: str, text: str, person: str | None) -> dict:
-        task_id = agent.start_task(conn, board_id, person or config.GUEST.name, text)
+    async def handle_text(board_id: str, text: str, speaker: Speaker) -> dict:
+        task_id = agent.start_task(conn, board_id, speaker, text)
         return await agent.run(conn, task_id, text)
 
     @app.get("/api/health")
@@ -170,18 +173,27 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     @app.post("/api/input")
     async def input_(body: Input):
         board_or_404(body.board_id)
-        text, person = body.text, body.person
+        text = body.text
+        # An explicit pick (dashboard/device) wins over voice ID; neither is authentication.
+        speaker = Speaker.declared(body.person) if body.person else Speaker.unknown()
         if body.audio_b64:
             try:
                 audio = base64.b64decode(body.audio_b64, validate=True)
             except binascii.Error:
                 raise HTTPException(400, "audio_b64 is not valid base64")
-            text = text or await asyncio.to_thread(voice.transcribe, audio)  # network call: keep the loop free
-            person = person or await asyncio.to_thread(voice.identify, audio)
+
+            async def given(value):
+                return value
+
+            # Both are network calls: run them in parallel, off the event loop.
+            text, speaker = await asyncio.gather(
+                given(text) if text else asyncio.to_thread(voice.transcribe, audio),
+                given(speaker) if body.person else asyncio.to_thread(voice.identify, audio),
+            )
         if not text or not text.strip():
             raise HTTPException(400, "Need text or audio")
         async with mutation_lock:
-            return await handle_text(body.board_id, text.strip(), person)
+            return await handle_text(body.board_id, text.strip(), speaker)
 
     @app.post("/api/sensor")
     async def sensor(body: Sensor):

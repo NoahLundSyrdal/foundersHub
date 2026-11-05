@@ -128,12 +128,18 @@ def notion_toolset() -> AbstractToolset | None:
     return Degradable(capability.get_toolset())
 
 
+def notion_tools_enabled() -> bool:
+    """Notion tools are off by default: their MCP tool definitions (~46k tokens) exceed the per-run token
+    budget, so every live request failed. Re-enable with NOTION_TOOLS_ENABLED=true once they load on demand."""
+    return config.LIVE and os.getenv("NOTION_TOOLS_ENABLED", "false").lower() == "true"
+
+
 def toolsets() -> list[AbstractToolset]:
-    """Live integration tools for a run. None in mock mode."""
-    if not config.LIVE:
+    """Live integration tools for a run. None in mock mode or while Notion tools are disabled."""
+    if not notion_tools_enabled():
         return []
     return [t for t in (notion_toolset(),) if t is not None]
 
 
 def status() -> dict:
-    return {"notion": config.LIVE and notion_connected()}
+    return {"notion": notion_tools_enabled() and notion_connected()}

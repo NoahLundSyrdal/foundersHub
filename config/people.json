@@ -1,6 +1,6 @@
 [
   {"name": "Leo", "role": "office manager", "auto_approve_nok": 500},
-  {"name": "Teammate 2", "role": "employee", "auto_approve_nok": 200},
+  {"name": "Noah", "role": "approver", "auto_approve_nok": 200},
   {"name": "Teammate 3", "role": "employee", "auto_approve_nok": 200},
   {"name": "Teammate 4", "role": "employee", "auto_approve_nok": 200}
 ]
