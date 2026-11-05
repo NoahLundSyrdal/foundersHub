@@ -178,6 +178,12 @@ async def decide(conn, task_id: str, approve: bool, proposal_fingerprint: str | 
             return await service(conn).decide(task_id, approve, proposal_fingerprint)
         except procurement_workflow.ProcurementConflict as error:
             raise StaleApproval(str(error)) from error
+    if prepared and prepared.get("source") == "facility-rule":
+        from office.facility_api import decide_replenishment
+        try:
+            return decide_replenishment(conn, task_id, approve, proposal_fingerprint)
+        except procurement_workflow.ProcurementConflict as error:
+            raise StaleApproval(str(error)) from error
     t = db.row(conn, "SELECT * FROM tasks WHERE id = ?", task_id)
     if not t or t["status"] != "awaiting_approval":
         raise StaleApproval("Task is not awaiting approval")

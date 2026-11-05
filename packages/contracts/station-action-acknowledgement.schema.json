@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "delivered",
+        "failed"
+      ]
+    },
+    "detail": {
+      "default": "",
+      "type": "string",
+      "maxLength": 500
+    }
+  },
+  "required": [
+    "status",
+    "detail"
+  ],
+  "additionalProperties": false
+}

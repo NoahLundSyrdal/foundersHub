@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "board_id": {
+      "type": "string",
+      "enum": [
+        "kitchen",
+        "bathroom",
+        "printer"
+      ]
+    },
+    "metric": {
+      "type": "string",
+      "enum": [
+        "co2_ppm",
+        "temperature_c",
+        "humidity_pct",
+        "stock_level",
+        "bin_fill_pct",
+        "obstruction_mm",
+        "noise_level",
+        "tilt_deg",
+        "heartbeat"
+      ]
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "above",
+        "below",
+        "stale"
+      ]
+    },
+    "trigger_value": {
+      "type": "number"
+    },
+    "reset_value": {
+      "type": "number"
+    },
+    "min_samples": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "min_duration_seconds": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 86400
+    },
+    "max_gap_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 3600
+    },
+    "actions": {
+      "minItems": 1,
+      "maxItems": 4,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "alert",
+          "ticket",
+          "replenish",
+          "sound"
+        ]
+      }
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "routine",
+        "urgent",
+        "critical"
+      ]
+    },
+    "item_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "schedule": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "timezone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "start": {
+              "type": "string",
+              "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+            },
+            "end": {
+              "type": "string",
+              "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+            }
+          },
+          "required": [
+            "timezone",
+            "start",
+            "end"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "board_id",
+    "metric",
+    "enabled",
+    "direction",
+    "trigger_value",
+    "reset_value",
+    "min_samples",
+    "min_duration_seconds",
+    "max_gap_seconds",
+    "actions",
+    "severity",
+    "item_id",
+    "summary"
+  ],
+  "additionalProperties": false
+}
