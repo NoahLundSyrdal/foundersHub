@@ -3,26 +3,54 @@
     "id": "kitchen",
     "location": "Kitchen",
     "responsible_team": "Facilities",
-    "equipment": ["coffee machine", "dishwasher"],
-    "modules": ["button", "screen", "light_grid", "microphone", "distance", "temperature_humidity"],
+    "equipment": [
+      "coffee machine",
+      "dishwasher"
+    ],
+    "modules": [
+      "button",
+      "screen",
+      "light_grid",
+      "distance",
+      "temperature_humidity",
+      "co2",
+      "speaker"
+    ],
     "triggers": []
   },
   {
     "id": "bathroom",
     "location": "Bathroom",
     "responsible_team": "Cleaning team",
-    "equipment": ["toilet", "sink", "soap dispenser"],
-    "modules": ["button", "light_grid", "distance"],
+    "equipment": [
+      "toilet",
+      "sink",
+      "soap dispenser"
+    ],
+    "modules": [
+      "button",
+      "light_grid",
+      "distance"
+    ],
     "triggers": [
-      {"kind": "stock_level", "below": 20, "prompt": "[sensor] The toilet paper holder in the bathroom is at {value}%."}
+      {
+        "kind": "stock_level",
+        "below": 20,
+        "prompt": "[sensor] The toilet paper holder in the bathroom is at {value}%."
+      }
     ]
   },
   {
     "id": "printer",
     "location": "Printer area",
     "responsible_team": "IT support",
-    "equipment": ["printer"],
-    "modules": ["button", "light_grid"],
+    "equipment": [
+      "printer"
+    ],
+    "modules": [
+      "button",
+      "light_grid"
+    ],
     "triggers": []
   }
 ]

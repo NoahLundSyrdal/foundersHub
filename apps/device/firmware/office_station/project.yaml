@@ -1,29 +1,28 @@
-# Office station firmware for the 14-port board (atech SDK). Owner: hardware.
-#
-# PORTS ARE NOT CONFIRMED. Replace every TODO with the port the module is actually in
-# (`atech view .` shows the board; compare with the one in your hand), then:
-#   atech validate . && atech build . && atech upload . && atech check
-# First build downloads the ESP32 compiler (~2.4 GB, once).
+# Office station firmware: our 14-port board as the KITCHEN station (atech SDK). Owner: hardware.
+# Ports probed and verified 2026-11-05; see docs/hardware.md. If you move a module, update this and re-upload.
+#   PATH=<venv>/bin:$PATH atech validate . && atech upload . && atech check
 #
 # Contract with apps/device/src/atech_bridge.py:
-#   events  btn_kitchen / btn_bathroom / btn_printer = 1 on press   -> push-to-talk for that station
-#           aht20_temperature, aht20_humidity, distance_sensor_min_distance, microphone_level
-#   actions led_<station>_fill {"r","g","b"}  (built in)
-#           office_say "<text>"               (custom, below: shows text on the screen)
+#   events  btn_kitchen = 1 on press -> push-to-talk for the kitchen station
+#           aht20_temperature, aht20_humidity, distance_sensor_min_distance, co2_co2 (+ co2_temperature/humidity)
+#   actions led_kitchen_fill {"r","g","b"}, led_aux_fill, speaker_play_rtttl, speaker_play_pcm  (built in)
+#           office_say "<text>"   (custom, below: shows text on the screen)
 name: office_station
 board: 14port
 modules:
-  - {id: button,          instance: btn_kitchen,    port: TODO}
-  - {id: button,          instance: btn_bathroom,   port: TODO}
-  - {id: button,          instance: btn_printer,    port: TODO}
-  - {id: neopixel,        instance: led_kitchen,    port: TODO}
-  - {id: neopixel,        instance: led_bathroom,   port: TODO}
-  - {id: neopixel,        instance: led_printer,    port: TODO}
-  - {id: st7735_tft,      instance: tft,            ports: [TODO, TODO]}
-  - {id: aht20,           instance: aht20,          port: TODO}
-  - {id: distance_sensor, instance: distance_sensor, port: TODO}
-  - {id: microphone,      instance: microphone,     ports: [TODO, TODO]}
+  - {id: speaker,           instance: speaker,         ports: [1, 2]}
+  - {id: button,            instance: btn_kitchen,     port: 3}
+  - {id: scd40_air_quality, instance: co2,             port: 4}
+  - {id: neopixel,          instance: led_aux,         port: 5}
+  - {id: neopixel,          instance: led_kitchen,     port: 6}
+  - {id: distance_sensor,   instance: distance_sensor, port: 9}
+  - {id: aht20,             instance: aht20,           port: 10}
+  - {id: st7735_tft,        instance: tft,             ports: [13, 14]}
 code:
+  setup: |
+    tft.clear();
+    tft.displayText("Office agent", 4, 30, 2, ST7735_TFT::COLOR_WHITE);
+    tft.display();
   loop: |
     if (atech_action == "office_say") {
       // 160x80 screen, size-1 font: 26 chars x 7 lines. Simple hard wrap.

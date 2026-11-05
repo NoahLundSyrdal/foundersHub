@@ -25,6 +25,7 @@ SENSORS = {  # event key -> (sensor kind, min seconds between posts)
     "aht20_temperature": ("temperature", 60),
     "aht20_humidity": ("humidity", 60),
     "distance_sensor_min_distance": ("distance_mm", 5),
+    "co2_co2": ("co2_ppm", 60),
 }
 SENSOR_STATION = "kitchen"  # which station's board the sensors belong to; change if they move
 
@@ -60,12 +61,12 @@ def read_events(board, api: str) -> None:
             print(f"event {ev.key} failed: {exc}", file=sys.stderr)
 
 
-def push_feedback(board, api: str) -> None:
+def push_feedback(board, api: str, stations: list[str]) -> None:
     from atech import ActionError
 
     shown: dict[str, tuple] = {}
     while True:
-        for station in STATIONS:
+        for station in stations:
             try:
                 with urlopen(f"{api.rstrip('/')}/api/devices/{station}/command", timeout=2) as r:
                     cmd = json.load(r)["command"]
@@ -88,6 +89,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--port", help="serial port; default: first Atech board on USB (`atech ports`)")
     p.add_argument("--api", default="http://127.0.0.1:3001")
+    p.add_argument("--stations", default="kitchen", help="comma-separated stations this board shows (needs led_<station> + btn_<station>)")
     p.add_argument("--diagnose", action="store_true", help="reboot the board first and print its boot report")
     args = p.parse_args()
     from atech import Board
@@ -97,7 +99,7 @@ def main() -> int:
             print(f"boot report: {board.diagnostics()}", file=sys.stderr)  # reboots; shows which modules answered
         threading.Thread(target=read_events, args=(board, args.api), daemon=True).start()
         try:
-            push_feedback(board, args.api)
+            push_feedback(board, args.api, args.stations.split(","))
         except KeyboardInterrupt:
             return 0
     return 0
