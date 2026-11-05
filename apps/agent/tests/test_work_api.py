@@ -268,3 +268,92 @@ def test_manual_repair_confirmation_updates_linked_ticket_without_verifying_it(a
     work = action(api, work, "wait", reason="Waiting for owner verification", next_review_at=(now + timedelta(days=1)).isoformat())
     assert latest(api, work)["status"] == "waiting"
     assert latest(api, work)["version"] == work["version"]
+
+
+@pytest.mark.parametrize("operation", ["cancel", "fail"])
+@pytest.mark.parametrize("route", ["legacy", "task"])
+def test_ended_work_blocks_linked_purchase_approval(api, operation, route):
+    task, work = coffee(api)
+    work = action(api, work, operation, reason="No longer needed")
+    fingerprint = proposal_fingerprint(task["proposal"])
+    if route == "legacy":
+        post(api, f"/api/requests/{task['id']}/approve", {"proposal_fingerprint": fingerprint}, status=409)
+    else:
+        post(api, f"/api/tasks/{task['id']}/decide", {"approve": True, "proposal_fingerprint": fingerprint}, status=409)
+    assert latest(api, work)["status"] == work["status"]
+    assert api.get("/api/state").json()["orders"] == []
+    assert api.get("/api/work/inventory").json()["items"] == []
+
+
+def test_service_repair_cannot_complete_before_booking(api):
+    task = post(api, "/api/input", {"board_id": "bathroom", "text": "Book a plumber"})
+    work = next(w for w in api.get("/api/work").json()["items"] if w["links"].get("task_id") == task["id"])
+    work = evidence(api, work, "repair", "repair")
+    action(api, work, "complete_step", step_id="repair", status=409)
+    # Closure must also reject pre-existing invalid completed steps.
+    stored = api.app.state.work.service.get(work["id"])
+    for step in stored["steps"]:
+        step["status"] = "completed"
+    api.app.state.work.service._save(stored)
+    action(api, work, "close", status=409)
+    api.app.state.work.service._save(work)
+    post(api, f"/api/requests/{task['id']}/approve", {"proposal_fingerprint": proposal_fingerprint(task["proposal"])})
+    work = latest(api, work)
+    work = action(api, work, "complete_step", step_id="repair")
+    work = evidence(api, work, "verify", "verification")
+    work = action(api, work, "complete_step", step_id="verify")
+    assert action(api, work, "close")["status"] == "completed"
+
+
+@pytest.mark.parametrize("domain", ["receipt", "repair"])
+def test_work_confirmation_notifies_dashboard_after_domain_update(api, domain):
+    from office import bus
+    if domain == "receipt":
+        task, work = coffee(api)
+        approve_coffee(api, task)
+        work = latest(api, work)
+    else:
+        task = post(api, "/api/input", {"board_id": "printer", "text": "Printer is broken"})
+        work = next(w for w in api.get("/api/work").json()["items"] if w["links"].get("task_id") == task["id"])
+    work = evidence(api, work, domain, domain)
+    states = []
+    def receive(event, data):
+        if event == "state.changed":
+            table = "orders" if domain == "receipt" else "tickets"
+            states.append(api.app.state.conn.execute(f"SELECT status FROM {table} WHERE task_id=?", (task["id"],)).fetchone()[0])
+    unsubscribe = bus.add_listener(receive, source=api.app.state.conn)
+    try:
+        action(api, work, "complete_step", step_id=domain)
+    finally:
+        unsubscribe()
+    assert states == ["delivered" if domain == "receipt" else "resolved"]
+
+
+def test_default_coffee_flow_uses_simulation_without_oda(api, monkeypatch):
+    from office import oda_food
+    monkeypatch.delenv("ODA_FOOD_ENABLED", raising=False)
+    assert not oda_food.enabled()
+    task, work = coffee(api)
+    approve_coffee(api, task)
+    assert latest(api, work)["links"]["order_id"]
+
+
+def test_work_monitor_recovers_after_failed_tick_and_remains_cancellable(api, monkeypatch, caplog):
+    import asyncio
+    from office import work_api
+    runtime = api.app.state.work
+    calls = []
+    async def sleep(_):
+        if len(calls) == 2:
+            raise asyncio.CancelledError
+    def tick():
+        calls.append(True)
+        if len(calls) == 1:
+            raise RuntimeError("private detail must not be logged")
+    monkeypatch.setattr(work_api.asyncio, "sleep", sleep)
+    monkeypatch.setattr(runtime, "tick", tick)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(runtime.watch())
+    assert len(calls) == 2
+    assert "Work monitor tick failed" in caplog.text
+    assert "private detail" not in caplog.text

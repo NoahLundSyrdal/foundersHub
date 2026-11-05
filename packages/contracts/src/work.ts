@@ -24,7 +24,7 @@ export const WorkCreateSchema = z.strictObject({
 });
 export const WorkActionSchema = z.strictObject({
   event_key: Key, expected_version: z.number().int().min(1),
-  action: z.enum(["assign", "wait", "block", "resume", "cancel", "fail", "start_step", "complete_step", "simulate_step", "reconcile_step", "close"]),
+  action: z.enum(["assign", "wait", "block", "resume", "cancel", "fail", "start_step", "complete_step", "simulate_step", "reconcile_step", "renew_approval", "close"]),
   step_id: Key.nullable().optional(), owner: Key.nullable().optional(), reason: Text.nullable().optional(),
   next_review_at: Timestamp.nullable().optional(), reference: Text.nullable().optional(),
   result: z.enum(["confirmed", "failed", "uncertain"]).nullable().optional(),

@@ -6,7 +6,7 @@ import "./work-queue.css";
 const terminal = new Set(["completed", "cancelled", "failed"]);
 const filters = ["Open", "Waiting", "Blocked", "Overdue", "Completed", "All"] as const;
 type Filter = typeof filters[number];
-type Action = "assign" | "wait" | "block" | "resume" | "cancel" | "fail" | "start_step" | "complete_step" | "simulate_step" | "reconcile_step" | "close";
+type Action = "assign" | "wait" | "block" | "resume" | "cancel" | "fail" | "start_step" | "complete_step" | "simulate_step" | "reconcile_step" | "renew_approval" | "close";
 
 function stamp(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "Not set";
@@ -232,13 +232,14 @@ function StepCard({ work, step, busy, mutate }: { work: WorkItem; step: WorkStep
   const finished = step.status === "completed";
   const external = ["purchase", "message", "booking", "access"].includes(step.action_kind);
   const linked = !!work.links.task_id && external;
+  const expired = !!step.approval && Date.parse(step.approval.expires_at) <= Date.now();
   const managed = !!work.links.task_id && work.template_key === "replenishment" && ["order", "inventory"].includes(step.id);
   const act = (action: Action, extra: Record<string, unknown> = {}) => void mutate(`/work/${encodeURIComponent(work.id)}/actions`, { ...command(work), action, step_id: step.id, ...extra });
   return <li className="wq-step">
     <div className="wq-step-title"><h5>{step.title}</h5><span className={`wq-status wq-${step.status}`}>{label(step.status)}</span></div>
     <p className="wq-step-meta">{step.owner} · {label(step.action_kind)}</p>
     {step.depends_on.length > 0 && <p className="hint">After: {step.depends_on.map((id) => work.steps.find((other) => other.id === id)?.title ?? id).join(", ")}{!dependenciesReady && " · waiting for dependencies"}</p>}
-    {step.approval && !finished && <div className="wq-approval"><strong>Exact action review · {label(step.approval.status)}</strong><pre>{JSON.stringify(step.action_snapshot, null, 2)}</pre><p className="hint">Approval expires {stamp(step.approval.expires_at)}. {work.simulation ? "Execution is simulated." : "No external execution is enabled here."}</p>{!linked && step.approval.status === "pending" && <div className="wq-actions"><button className="secondary" disabled={busy || !dependenciesReady} onClick={() => void mutate(`/work/${encodeURIComponent(work.id)}/decisions`, { ...command(work), step_id: step.id, approve: true, proposal_fingerprint: step.approval!.fingerprint })}>Approve exact action</button><button className="text-button" disabled={busy} onClick={() => void mutate(`/work/${encodeURIComponent(work.id)}/decisions`, { ...command(work), step_id: step.id, approve: false, proposal_fingerprint: step.approval!.fingerprint })}>Reject</button></div>}</div>}
+    {step.approval && !finished && <div className="wq-approval"><strong>Exact action review · {label(step.approval.status)}</strong><pre>{JSON.stringify(step.action_snapshot, null, 2)}</pre><p className="hint">Approval expires {stamp(step.approval.expires_at)}. {work.simulation ? "Execution is simulated." : "No external execution is enabled here."}</p>{!linked && step.approval.status === "pending" && !expired && <div className="wq-actions"><button className="secondary" disabled={busy || !dependenciesReady} onClick={() => void mutate(`/work/${encodeURIComponent(work.id)}/decisions`, { ...command(work), step_id: step.id, approve: true, proposal_fingerprint: step.approval!.fingerprint })}>Approve exact action</button><button className="text-button" disabled={busy} onClick={() => void mutate(`/work/${encodeURIComponent(work.id)}/decisions`, { ...command(work), step_id: step.id, approve: false, proposal_fingerprint: step.approval!.fingerprint })}>Reject</button></div>}{!work.links.task_id && expired && step.approval.status !== "rejected" && !step.execution && <button className="secondary" disabled={busy || !dependenciesReady} onClick={() => act("renew_approval")}>Renew approval</button>}</div>}
     {step.execution && <p className="wq-execution">{work.simulation ? "Simulated execution" : "Execution"}: {step.execution.status}{step.execution.reference && <> · <code>{step.execution.reference}</code></>}{step.execution.status === "uncertain" && " · reconcile the persisted execution before further action"}</p>}
     {!finished && !linked && !managed && step.execution && ["started", "uncertain"].includes(step.execution.status) && <details className="wq-reconcile" open><summary>Reconcile execution</summary><form className="wq-form" onSubmit={(event) => { event.preventDefault(); act("reconcile_step", { result: reconcileResult, reference: reconcileReference.trim(), reason: reconcileReason.trim() }); }}>
       <p className="hint">Check the recorded execution <code>{step.execution.id}</code> against its actual result. Reconciliation records what happened; it does not retry the action.</p>
@@ -258,7 +259,7 @@ function StepCard({ work, step, busy, mutate }: { work: WorkItem; step: WorkStep
       </form></details>
       <div className="wq-actions">
         {step.status === "pending" && <button className="secondary" disabled={busy || !dependenciesReady} onClick={() => act("start_step")}>Start step</button>}
-        {external && !linked && work.simulation && !step.execution && <button className="secondary" disabled={busy || !dependenciesReady || (!!step.approval && step.approval.status !== "approved")} onClick={() => act("simulate_step")}>Simulate action</button>}
+        {external && !linked && work.simulation && !step.execution && <button className="secondary" disabled={busy || !dependenciesReady || expired || (!!step.approval && step.approval.status !== "approved")} onClick={() => act("simulate_step")}>Simulate action</button>}
         {linked && <p className="hint">Use the linked request to approve and execute this action.</p>}
         <button className="secondary" disabled={busy || !dependenciesReady || !hasEvidence || (external && step.execution?.status !== "confirmed")} onClick={() => act("complete_step")}>Confirm step complete</button>
       </div>

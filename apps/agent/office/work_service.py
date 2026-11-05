@@ -147,7 +147,7 @@ class WorkService:
         if approval["fingerprint"] != self._fingerprint(work, step):
             raise WorkConflict("Approved action changed; review it again")
         if (not step["execution"] or step["execution"]["status"] != "confirmed") and datetime.fromisoformat(approval["expires_at"]) <= self._now():
-            raise WorkConflict("Action approval expired; a new reviewed action is required")
+            raise WorkConflict("Action approval expired; use Renew approval, then review the exact action again")
 
     def _evidence(self, work, step):
         kinds = {item["kind"] for item in work["evidence"] if item["step_id"] == step["id"]}
@@ -186,11 +186,13 @@ class WorkService:
             approval = step["approval"]
             if not approval or not step["requires_approval"]:
                 raise WorkConflict("Step does not require approval")
+            if approval["status"] != "pending":
+                raise WorkConflict("Action already decided; its decision cannot be replaced")
             self._dependencies(work, step)
             if body.proposal_fingerprint != approval["fingerprint"] or body.proposal_fingerprint != self._fingerprint(work, step):
                 raise WorkConflict("Proposed action changed; review it again")
             if datetime.fromisoformat(approval["expires_at"]) <= self._now():
-                raise WorkConflict("Proposed action expired; create a fresh reviewed step")
+                raise WorkConflict("Proposed action expired; use Renew approval, then review the exact action again")
             approval["status"] = "approved" if body.approve else "rejected"
             approval["decided_by"] = "local-operator"
             step["status"] = "pending" if body.approve else "blocked"
@@ -250,7 +252,17 @@ class WorkService:
                 if step["status"] == "completed":
                     raise WorkConflict("Step is already completed")
                 self._dependencies(work, step)
-                if action == "start_step":
+                if action == "renew_approval":
+                    approval = step["approval"]
+                    if step["execution"] or not approval or approval["status"] == "rejected":
+                        raise WorkConflict("Only unexecuted, non-rejected approvals can be renewed")
+                    if datetime.fromisoformat(approval["expires_at"]) > self._now():
+                        raise WorkConflict("Approval has not expired")
+                    step["approval"] = {"fingerprint": self._fingerprint(work, step), "status": "pending",
+                        "expires_at": stamp(self._now() + timedelta(days=1)), "decided_by": None}
+                    step["status"] = "awaiting_approval"
+                    work["status"], work["waiting_reason"] = "awaiting_approval", "Review renewed exact action"
+                elif action == "start_step":
                     if step["execution"]:
                         raise WorkConflict("An execution attempt already exists; reconcile it instead")
                     self._approval(work, step)

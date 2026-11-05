@@ -196,6 +196,10 @@ async def run(conn, task_id: str, prompt: str | None, deferred: DeferredToolResu
 
 async def decide(conn, task_id: str, approve: bool, proposal_fingerprint: str | None = None) -> dict:
     """Resolve the stored pending calls. Args come from the DB, never the client, so approval = exactly what was shown."""
+    if approve and conn.execute("SELECT 1 FROM sqlite_master WHERE name='office_work_links'").fetchone():
+        linked = db.row(conn, "SELECT w.body FROM office_work_links l JOIN office_work_items w ON w.id=l.work_id WHERE l.source_id=?", "task:" + task_id)
+        if linked and json.loads(linked["body"])["status"] in {"completed", "cancelled", "failed"}:
+            raise StaleApproval("Linked work has ended; create a new request before approving")
     prepared = procurement_workflow.get_context(conn, task_id)
     if prepared and prepared.get("source") == "oda-food":
         from office.oda_food import service
