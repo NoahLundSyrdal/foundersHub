@@ -23,6 +23,8 @@ No API key is needed with `OFFICE_MODEL=mock`. For live Pydantic AI, set `OFFICE
 
 The app reuses Leo's `feat/pydantic-agent-backend` with ranked offers, severity assessment, exact approval and critical dashboard alerts. See [the procurement guide](docs/procurement.md) for endpoints and configuration. `AGENT_DATABASE_PATH` defaults to `.data/agent.sqlite`, separate from the older TypeScript database.
 
+See [deterministic facility rules and hardware acceptance steps](docs/facility-rules.md) for backend sensor thresholds, controlled replenishment, local inspection tasks and station sound commands.
+
 ## Try the flow
 
 1. Choose the kitchen station and press its simulated button.

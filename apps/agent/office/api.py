@@ -3,12 +3,16 @@
 import base64
 import asyncio
 import json
+import math
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, bus, config, db, voice, procurement_workflow, legacy
+from office import facility_api
+from office.facility_rules import FacilityReading
 
 
 class Input(BaseModel):
@@ -19,9 +23,13 @@ class Input(BaseModel):
 
 
 class Sensor(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False, strict=True)
     board_id: str
     kind: str  # e.g. stock_level, temperature, humidity, distance
     value: float
+    event_id: str | None = Field(default=None, min_length=1, max_length=128)
+    timestamp: str | None = None
+    simulation: bool = False
 
 
 class Decision(BaseModel):
@@ -39,13 +47,29 @@ class DeviceEvent(BaseModel):  # legacy shape still emitted by apps/device/src/b
 
 def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     conn = db.connect(db_path)
-    app = FastAPI(title="Office agent")
     procurement_workflow.ensure_schema(conn)
     agent.recover_interrupted(conn)
     mutation_lock = asyncio.Lock()
+    facilities = facility_api.FacilityService(conn, mutation_lock)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        async with mutation_lock:
+            await facilities.tick()
+        monitor = asyncio.create_task(facilities.watch())
+        try:
+            yield
+        finally:
+            monitor.cancel()
+            with suppress(asyncio.CancelledError):
+                await monitor
+
+    app = FastAPI(title="Office agent", lifespan=lifespan)
     app.state.conn = conn
     app.state.mutation_lock = mutation_lock
+    app.state.facilities = facilities
     app.include_router(legacy.router(conn))
+    app.include_router(facility_api.router(facilities))
 
     def board_or_404(board_id: str) -> config.Board:
         if board_id not in config.BOARDS:
@@ -93,12 +117,29 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
     async def sensor(body: Sensor):
         async with mutation_lock:
             board = board_or_404(body.board_id)
-            prev = db.row(conn, "SELECT value FROM sensor_readings WHERE board_id = ? AND kind = ? ORDER BY at DESC, rowid DESC LIMIT 1", board.id, body.kind)
+            metric = facility_api.metric_for(body.kind)
+            if metric:
+                try:
+                    reading = FacilityReading.model_validate({
+                        "event_id": body.event_id or db.new_id(), "board_id": board.id,
+                        "metric": metric, "value": body.value,
+                        "timestamp": body.timestamp or facilities.engine.snapshot()["evaluated_at"],
+                        "simulation": body.simulation,
+                    })
+                    result = await facilities.ingest(reading)
+                    # Preserve the native stock sensor response while replacing its
+                    # old prompt-based trigger with the same fixed rule dispatcher.
+                    if any(t["kind"] == body.kind for t in board.triggers):
+                        for incident in result["incidents"]:
+                            action = incident["action_results"].get("replenish", {})
+                            if incident["status"] == "active" and action.get("task_id"):
+                                task = db.task_view(db.row(conn, "SELECT * FROM tasks WHERE id=?", action["task_id"]))
+                                return procurement_workflow.enrich_task(conn, task) | {"command": legacy.response(conn, task["id"])["command"]}
+                        return {"stored": True}
+                    return {"stored": True, **result}
+                except ValueError as error:
+                    raise HTTPException(400, str(error)) from error
             conn.execute("INSERT INTO sensor_readings VALUES (?, ?, ?, ?)", (board.id, body.kind, body.value, db.now()))
-            for trig in board.triggers:
-                crossed = body.value < trig["below"] and (prev is None or prev["value"] >= trig["below"])
-                if trig["kind"] == body.kind and crossed:  # fire on the transition only, not on every low reading
-                    return await handle_text(board.id, trig["prompt"].format(value=round(body.value)), "sensor")
             return {"stored": True}
 
     @app.post("/api/tasks/{task_id}/decide")
@@ -145,6 +186,12 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
         async with mutation_lock:
             seen = db.row(conn, "SELECT task_id FROM device_events WHERE event_id=?", ev.event_id)
             if seen:
+                try:
+                    facilities.validate_device_retry(ev.event_id, ev.model_dump())
+                except ValueError as error:
+                    raise HTTPException(409, str(error)) from error
+                if ev.type == "stock_low":
+                    await facilities.resume_stock_checks()
                 return legacy.response(conn, seen["task_id"], True)
             if ev.type not in {"button_pressed", "speech_transcript", "stock_low"}:
                 raise HTTPException(400, "Unsupported event type")
@@ -154,8 +201,15 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                     raise HTTPException(400, "Speech events require bounded text")
             elif ev.type == "stock_low":
                 item_id = ev.payload.get("item_id")
-                if item_id not in config.PRODUCTS:
-                    raise HTTPException(400, "Stock events require a configured item")
+                try:
+                    facilities.validate_stock_item(board.id, item_id)
+                    level = ev.payload.get("level")
+                    if level is not None and (type(level) not in (int, float) or not math.isfinite(level) or not 0 <= level <= 100):
+                        raise ValueError("Stock level must be a finite percentage between 0 and 100")
+                    if type(ev.payload.get("simulation", True)) is not bool:
+                        raise ValueError("simulation must be a boolean")
+                except ValueError as error:
+                    raise HTTPException(400, str(error)) from error
                 # Pack sizes/readings are not requested quantities.
                 text = f"[sensor] Need 1 {item_id.replace('-', ' ')} at {board.location}."
             else:
@@ -167,6 +221,7 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
                 conn.execute("INSERT INTO tasks(id,board_id,person,prompt,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
                              (task_id,board.id,config.GUEST.name,text,status,db.now(),db.now()))
                 conn.execute("INSERT INTO device_events VALUES(?,?,?)", (ev.event_id,task_id,"{}"))
+                facilities.remember_device_input(ev.event_id, ev.model_dump())
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
@@ -174,7 +229,9 @@ def create_app(db_path: str = config.DATABASE_PATH) -> FastAPI:
             if ev.type == "button_pressed":
                 db.set_command(conn,board.id,"Describe what you need","blue")
                 bus.publish("board.listen", {"board_id":board.id})
-                bus.publish("requests.updated", {"request_id":task_id})
+                bus.publish("requests.updated", {"request_id":task_id}, source=conn)
+            elif ev.type == "stock_low":
+                await facilities.prepare_stock_check(task_id, board.id, ev.payload["item_id"], ev.payload.get("simulation", True))
             else:
                 await agent.run(conn,task_id,text)
             result = legacy.response(conn,task_id)

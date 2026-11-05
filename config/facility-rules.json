@@ -1,0 +1,271 @@
+[
+  {
+    "board_id": "kitchen",
+    "enabled": true,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "urgent",
+    "item_id": null,
+    "id": "co2-high",
+    "title": "Elevated CO₂",
+    "metric": "co2_ppm",
+    "direction": "above",
+    "trigger_value": 1200.0,
+    "reset_value": 1000.0,
+    "min_duration_seconds": 30.0,
+    "actions": [
+      "alert",
+      "ticket"
+    ],
+    "summary": "Sustained elevated CO₂; inspect ventilation. Configurable operational threshold."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": true,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": null,
+    "id": "temperature-high",
+    "title": "Room too warm",
+    "metric": "temperature_c",
+    "direction": "above",
+    "trigger_value": 27.0,
+    "reset_value": 25.0,
+    "min_duration_seconds": 300.0,
+    "actions": [
+      "alert",
+      "ticket"
+    ],
+    "summary": "Sustained temperature above the configured range; inspect room conditions."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": true,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": null,
+    "id": "temperature-low",
+    "title": "Room too cold",
+    "metric": "temperature_c",
+    "direction": "below",
+    "trigger_value": 18.0,
+    "reset_value": 20.0,
+    "min_duration_seconds": 300.0,
+    "actions": [
+      "alert",
+      "ticket"
+    ],
+    "summary": "Sustained temperature below the configured range; inspect room conditions."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": true,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": null,
+    "id": "humidity-high",
+    "title": "Persistent high humidity",
+    "metric": "humidity_pct",
+    "direction": "above",
+    "trigger_value": 65.0,
+    "reset_value": 60.0,
+    "min_duration_seconds": 600.0,
+    "actions": [
+      "alert",
+      "ticket"
+    ],
+    "summary": "Persistent high humidity; inspect room conditions and moisture sources."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": true,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": "coffee",
+    "id": "stock-low",
+    "title": "Coffee running low",
+    "metric": "stock_level",
+    "direction": "below",
+    "trigger_value": 20.0,
+    "reset_value": 30.0,
+    "min_duration_seconds": 30.0,
+    "actions": [
+      "alert",
+      "replenish"
+    ],
+    "summary": "Calibrated coffee container level is low; prepare replenishment for approval."
+  },
+  {
+    "board_id": "bathroom",
+    "enabled": true,
+    "min_samples": 1,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": "toilet-paper",
+    "id": "bathroom-stock-low",
+    "title": "Toilet paper running low",
+    "metric": "stock_level",
+    "direction": "below",
+    "trigger_value": 20.0,
+    "reset_value": 30.0,
+    "min_duration_seconds": 0.0,
+    "actions": [
+      "alert",
+      "replenish"
+    ],
+    "summary": "Calibrated bathroom stock check is low; prepare one catalogue unit of toilet paper."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": false,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": null,
+    "id": "bin-full",
+    "title": "Bin needs emptying",
+    "metric": "bin_fill_pct",
+    "direction": "above",
+    "trigger_value": 80.0,
+    "reset_value": 60.0,
+    "min_duration_seconds": 60.0,
+    "actions": [
+      "ticket"
+    ],
+    "summary": "Calibrated bin fill is high; arrange local cleaning."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": false,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": null,
+    "id": "obstruction",
+    "title": "Object left in monitored space",
+    "metric": "obstruction_mm",
+    "direction": "below",
+    "trigger_value": 300.0,
+    "reset_value": 400.0,
+    "min_duration_seconds": 60.0,
+    "actions": [
+      "alert",
+      "ticket",
+      "sound"
+    ],
+    "summary": "Persistent object inside the configured clear area; inspect and clear it."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": false,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": null,
+    "id": "noise-high",
+    "title": "Sustained loud sound",
+    "metric": "noise_level",
+    "direction": "above",
+    "trigger_value": 2000.0,
+    "reset_value": 1500.0,
+    "min_duration_seconds": 30.0,
+    "actions": [
+      "alert"
+    ],
+    "summary": "Sound amplitude exceeds the locally calibrated baseline; inspect the source."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": false,
+    "min_samples": 3,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": null,
+    "id": "equipment-tilted",
+    "title": "Equipment moved or tilted",
+    "metric": "tilt_deg",
+    "direction": "above",
+    "trigger_value": 30.0,
+    "reset_value": 15.0,
+    "min_duration_seconds": 5.0,
+    "actions": [
+      "alert"
+    ],
+    "summary": "Equipment orientation has changed; inspect its placement."
+  },
+  {
+    "board_id": "kitchen",
+    "enabled": true,
+    "min_samples": 1,
+    "max_gap_seconds": 30.0,
+    "severity": "routine",
+    "item_id": null,
+    "id": "telemetry-offline",
+    "title": "Sensor connection lost",
+    "metric": "heartbeat",
+    "direction": "stale",
+    "trigger_value": 30.0,
+    "reset_value": 0.0,
+    "min_duration_seconds": 0.0,
+    "actions": [
+      "alert"
+    ],
+    "summary": "No fresh telemetry from this board; readings are unknown."
+  },
+  {
+    "id": "overnight-temperature-low",
+    "title": "Possible open window or heating issue",
+    "board_id": "kitchen",
+    "metric": "temperature_c",
+    "enabled": true,
+    "direction": "below",
+    "trigger_value": 16.0,
+    "reset_value": 18.0,
+    "min_samples": 3,
+    "min_duration_seconds": 900.0,
+    "max_gap_seconds": 120.0,
+    "actions": [
+      "alert",
+      "ticket",
+      "sound"
+    ],
+    "severity": "urgent",
+    "item_id": null,
+    "summary": "Sustained low room temperature overnight; check windows and heating. Window state is unconfirmed.",
+    "schedule": {
+      "timezone": "Europe/Oslo",
+      "start": "22:00",
+      "end": "07:00"
+    }
+  },
+  {
+    "id": "overnight-humidity-high",
+    "title": "Persistent moisture conditions overnight",
+    "board_id": "kitchen",
+    "metric": "humidity_pct",
+    "enabled": true,
+    "direction": "above",
+    "trigger_value": 60.0,
+    "reset_value": 55.0,
+    "min_samples": 3,
+    "min_duration_seconds": 1800.0,
+    "max_gap_seconds": 120.0,
+    "actions": [
+      "alert",
+      "ticket",
+      "sound"
+    ],
+    "severity": "urgent",
+    "item_id": null,
+    "summary": "Persistent high relative humidity overnight; inspect moisture sources and cold surfaces. This is not a mold diagnosis.",
+    "schedule": {
+      "timezone": "Europe/Oslo",
+      "start": "22:00",
+      "end": "07:00"
+    }
+  }
+]
