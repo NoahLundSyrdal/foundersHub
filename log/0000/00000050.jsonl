@@ -1,0 +1,1 @@
+{"id":"mw3rrbi9d4f41fd7","member":"jrg-bergh-c202cb","lamport":301,"ts":1793896667649,"type":"upsert","kind":"task","key":"own-pr8-office-workflows","data":{"note":"PR 8 merged by Noah at 0740237 before the hold note arrived, so no conflict. Jørgen still owns it: post-merge review of ad996a1 under way. Don't change work_*.py meanwhile without posting here."},"source":"explicit"}
