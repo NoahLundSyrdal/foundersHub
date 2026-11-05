@@ -16,9 +16,10 @@ import { OfficeTwin } from "./OfficeTwin";
 import { ProcurementAlerts } from "./ProcurementAlerts";
 import { TicketsView } from "./TicketsView";
 import WorkQueue from "./WorkQueue";
-import { OdaConnection, OdaFoodOrder } from "./OdaFoodOrder";
+import { ApprovalChannelContext, OdaConnection, OdaFoodOrder } from "./OdaFoodOrder";
 
 type Health = {
+  approval_channel?: "dashboard" | "whatsapp";
   agent_provider?: string;
   supplier_provider?: string;
   simulation?: boolean;
@@ -192,6 +193,7 @@ export function App() {
     });
   const mockAgent = (health?.agent_provider ?? health?.model) === "mock";
   return (
+    <ApprovalChannelContext.Provider value={health?.approval_channel ?? "dashboard"}>
     <div className="desk">
       <h1 className="sr-only">Office status</h1>
       <AgentStage
@@ -303,5 +305,6 @@ export function App() {
         )}
       </main>
     </div>
+    </ApprovalChannelContext.Provider>
   );
 }
