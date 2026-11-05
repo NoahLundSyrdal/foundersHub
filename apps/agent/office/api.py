@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from office import agent, approval_email, brain, bus, config, db, integrations, voice, procurement_workflow, requests_api
 from office import chat_api, facility_api, oda_food, oda_api, work_api
-from office import alert_rules, order_confirmations, whatsapp_delivery, room_service, room_demo
+from office import alert_rules, order_confirmations, whatsapp_delivery, room_service, room_demo, development, development_api
 from office.room_messaging import RoomMessageConflict
 from office.facility_rules import FacilityReading
 from office.speaker import Speaker
@@ -128,6 +128,8 @@ def create_app(db_path: str = config.DATABASE_PATH, *, room_calendar_path=None, 
     app.state.oda_food = groceries
     app.state.work = work
     app.state.order_confirmations = approvals
+    app.state.development = development.Development(conn)
+    app.include_router(development_api.router(app.state.development))
     app.state.rooms = rooms
     app.state.whatsapp = delivery
     app.include_router(requests_api.router(conn))
