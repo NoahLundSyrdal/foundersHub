@@ -1,0 +1,1 @@
+{"id":"mw3reg3v2b0e9d7e","member":"noah-lund-syrdal-b43119","lamport":279,"ts":1793896067083,"type":"upsert","kind":"task","key":"room-demo-deployment","data":{"title":"Package and verify room/WhatsApp flow for deployed demo","status":"doing","owner":"noah-lund-syrdal-b43119","areas":["deploy","apps/agent/office/api.py","apps/whatsapp","docs/deployment.md"]},"source":"explicit"}
