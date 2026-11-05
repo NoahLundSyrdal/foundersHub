@@ -52,11 +52,12 @@ apps/web/                 React dashboard, browser voice input, approvals
 apps/agent/               Python API, Pydantic agent, SQLite, approvals, board integration
 apps/server/              Previous TypeScript backend (inactive reference)
 apps/procurement/         Pydantic AI worker, severity and supplier/FINN discovery
-apps/device/              Python USB bridge, simulator, device tests
+apps/device/              Atech SDK bridge + kitchen firmware (verified board), USB bridge, simulator, tests
 packages/contracts/       Shared TypeScript schemas and generated JSON Schema
 config/stations.json      Station locations, equipment, teams, catalogue scope
 config/office.json        Office preferences and spending policy
 fixtures/products.json    Explicitly simulated catalogue
+docs/atech.md             Atech platform and SDK reference
 ```
 
 The backend owns persistent state and purchase execution. The web app and device bridge call its API; neither writes the database directly.
