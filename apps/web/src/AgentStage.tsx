@@ -32,6 +32,8 @@ function position(request: OfficeRequest): { step: number; mood: Mood } {
     case "awaiting_approval":
     case "maintenance_open":
       return { step: 3, mood: "waiting" };
+    case "checkout_ready":
+      return { step: 4, mood: "waiting" };
     case "failed":
       return { step: request.proposal ? 4 : 1, mood: "failed" };
     default:
@@ -51,8 +53,9 @@ function caption(request: OfficeRequest): { title: string; note?: string } {
     case "processing":
       return { title: workingCaptions[1] };
     case "needs_clarification":
-      return { title: "I need a little more detail." };
+      return { title: request.grocery?.state === "connection_required" ? "Connect Oda to find food." : "I need a little more detail." };
     case "awaiting_approval":
+      if (request.grocery) return { title: "Review your Oda food basket.", note: "Adds real products to your cart. Payment stays on Oda." };
       return request.proposal
         ? {
             title: `${request.proposal.product.name}, ${money(request.proposal.total_nok)}. OK to order?`,
@@ -69,6 +72,8 @@ function caption(request: OfficeRequest): { title: string; note?: string } {
         title: "Order placed, in simulation.",
         note: "No real order was made.",
       };
+    case "checkout_ready":
+      return { title: "Your Oda cart is ready for checkout.", note: "Review delivery and pay on Oda to place the order." };
     case "failed":
       return request.proposal
         ? {
@@ -131,7 +136,7 @@ export function AgentStage({
     "Understanding",
     "Checking rules",
     maintenance ? "Team assigned" : "Your approval",
-    maintenance ? "Resolved" : "Simulated order",
+    maintenance ? "Resolved" : request?.grocery ? "Checkout on Oda" : "Simulated order",
   ];
   const text: { title: string; note?: string } = offline
     ? {
@@ -158,7 +163,7 @@ export function AgentStage({
           <a className="wordmark" href="/" aria-label="Office home">
             office
           </a>
-          <span>Simulation</span>
+          <span>{request?.grocery ? "Live Oda cart" : "Simulation"}</span>
         </header>
         <Avatar mood={mood} request={offline ? undefined : request} />
         <div className="stage-copy" aria-live="polite">
