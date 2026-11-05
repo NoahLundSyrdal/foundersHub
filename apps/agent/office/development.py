@@ -69,7 +69,7 @@ class GitHub:
 
 
 class Development:
-    def __init__(self, conn, *, github=None, enabled=None):
+    def __init__(self, conn, *, github=None, enabled=None, recover_interrupted=True):
         self.conn = conn
         self.github = github or GitHub()
         self.enabled = (os.getenv("OFFICE_DEVELOPMENT_ENABLED", "false").lower() == "true") if enabled is None else enabled
@@ -79,8 +79,11 @@ class Development:
             state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
             expected_base TEXT, run_id INTEGER, run_url TEXT, pr_url TEXT, pr_number INTEGER,
             merge_sha TEXT, error TEXT)""")
-        conn.execute("UPDATE development_requests SET state='uncertain', error=? WHERE state='dispatching'",
-                     ("Dispatch was interrupted. Refresh to find the existing cloud run; do not submit it again.",))
+        if "auto_merge" not in {row[1] for row in conn.execute("PRAGMA table_info(development_requests)")}:
+            conn.execute("ALTER TABLE development_requests ADD COLUMN auto_merge INTEGER NOT NULL DEFAULT 0")
+        if recover_interrupted:
+            conn.execute("UPDATE development_requests SET state='uncertain', error=? WHERE state='dispatching'",
+                         ("Dispatch was interrupted. Refresh to find the existing cloud run; do not submit it again.",))
 
     def _enabled(self):
         if not self.enabled:
@@ -90,11 +93,16 @@ class Development:
         item = db.row(self.conn, "SELECT * FROM development_requests WHERE id=?", request_id)
         if not item:
             raise DevelopmentError("Development request not found", 404)
-        return item
+        return self._public(item)
+
+    @staticmethod
+    def _public(item):
+        return item | {"auto_merge": bool(item["auto_merge"]),
+                       "merge_fingerprint": hashlib.sha256(("merge-after-checks:" + item["fingerprint"]).encode()).hexdigest()}
 
     def snapshot(self):
         return {"enabled": self.enabled, "repository": REPOSITORY, "workflow": WORKFLOW,
-                "requests": db.rows(self.conn, "SELECT * FROM development_requests ORDER BY rowid DESC LIMIT 100")}
+                "requests": [self._public(item) for item in db.rows(self.conn, "SELECT * FROM development_requests ORDER BY rowid DESC LIMIT 100")]}
 
     def _update(self, request_id, **fields):
         fields["updated_at"] = db.now()
@@ -114,18 +122,23 @@ class Development:
         if previous:
             if previous["fingerprint"] != fingerprint:
                 raise DevelopmentError("This request ID already belongs to different feedback")
-            return previous
+            return self._public(previous)
         self.conn.execute("""INSERT INTO development_requests(id,text,fingerprint,state,created_at,updated_at)
             VALUES(?,?,?,'draft',?,?)""", (request_id, text, fingerprint, db.now(), db.now()))
         return self.get(request_id)
 
-    async def send(self, request_id, fingerprint):
+    async def send(self, request_id, fingerprint, auto_merge=False):
         self._enabled()
         async with self.lock:
             item = self.get(request_id)
-            if item["fingerprint"] != fingerprint:
+            if type(auto_merge) is not bool:
+                raise DevelopmentError("Choose whether this exact request may merge after checks", 400)
+            expected_fingerprint = item["merge_fingerprint"] if auto_merge else item["fingerprint"]
+            if expected_fingerprint != fingerprint:
                 raise DevelopmentError("Feedback changed. Review the saved request before sending")
             if item["state"] not in {"draft", "failed_to_dispatch"}:
+                if item["auto_merge"] != auto_merge:
+                    raise DevelopmentError("Merge permission cannot be changed after dispatch")
                 # Retries, including after lost responses, return the durable result.
                 return item
             active = db.row(self.conn, "SELECT id FROM development_requests WHERE state IN ('dispatching','submitted','queued','in_progress','uncertain') LIMIT 1")
@@ -138,10 +151,10 @@ class Development:
                     raise ValueError
             except (RemoteError, KeyError, ValueError):
                 return self._update(request_id, state="failed_to_dispatch", error="Could not read GitHub main. Check repository access; nothing was dispatched.")
-            self._update(request_id, state="dispatching", expected_base=sha, error=None)
+            self._update(request_id, state="dispatching", expected_base=sha, auto_merge=int(auto_merge), error=None)
             try:
                 await self.github.request("POST", f"repos/{REPOSITORY}/actions/workflows/{WORKFLOW}/dispatches",
-                    {"ref": REF, "inputs": {"request_id": request_id, "request": item["text"], "expected_base": sha}})
+                    {"ref": REF, "inputs": {"request_id": request_id, "request": item["text"], "expected_base": sha, "auto_merge": auto_merge}})
             except RemoteError as error:
                 return self._update(request_id, state="uncertain" if error.uncertain else "failed_to_dispatch",
                     error="GitHub acceptance is uncertain. Refresh to reconcile; this request will not be dispatched again." if error.uncertain else

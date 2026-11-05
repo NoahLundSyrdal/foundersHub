@@ -68,7 +68,8 @@ class ReleaseTests(unittest.TestCase):
                 demo.verify_checks(self.root, NEW)
 
     def test_sensitive_paths_need_manual_installation(self):
-        demo.safe_changes(["apps/web/src/App.tsx", "apps/agent/office/help.py", "docs/help.md"])
+        demo.safe_changes(["apps/web/src/App.tsx", "apps/web/src/api.ts", "apps/agent/office/api.py",
+                           "apps/agent/office/temperature_monitor.py", "apps/agent/tests/test_temperature_monitor.py", "docs/help.md"])
         for path in [".github/workflows/validate.yml", "scripts/local_demo.py", "config/office.json",
                      "apps/agent/office/db.py", "apps/agent/office/dispatch.py", "apps/agent/uv.lock",
                      "apps/web/package.json", "apps/agent/migrations/001.py", "data/new.sql",

@@ -77,7 +77,7 @@ def test_repeated_and_concurrent_sends_dispatch_once_with_exact_text(demo):
     assert send(demo, item).json()["state"] == "submitted"
     posts = [call for call in demo[1].calls if call[0] == "POST"]
     assert len(posts) == 1
-    assert posts[0][2] == {"ref": "main", "inputs": {"request_id": item["id"], "request": item["text"], "expected_base": BASE}}
+    assert posts[0][2] == {"ref": "main", "inputs": {"request_id": item["id"], "request": item["text"], "expected_base": BASE, "auto_merge": False}}
     other = save(demo, "request-two")
     assert send(demo, other).status_code == 409
 
@@ -136,4 +136,24 @@ def test_disabled_feature_does_not_create_or_send(demo):
     demo[0].enabled = False
     assert demo[2].get("/api/development").json()["enabled"] is False
     assert demo[2].post("/api/development", json={"id": "request-one", "text": "Fix heading"}).status_code == 503
+    assert demo[1].calls == []
+
+
+def test_auto_merge_requires_the_merge_fingerprint_and_cannot_change_after_dispatch(demo):
+    item = save(demo)
+    path = f"/api/development/{item['id']}/send"
+    assert demo[2].post(path, json={"fingerprint": item["fingerprint"], "auto_merge": True}).status_code == 409
+    assert demo[1].calls == []
+    response = demo[2].post(path, json={"fingerprint": item["merge_fingerprint"], "auto_merge": True})
+    assert response.status_code == 200 and response.json()["auto_merge"] is True
+    assert demo[1].calls[-1][2]["inputs"]["auto_merge"] is True
+    assert send(demo, item).status_code == 409
+    assert demo[2].post(path, json={"fingerprint": item["merge_fingerprint"], "auto_merge": True}).json()["state"] == "submitted"
+    assert len([call for call in demo[1].calls if call[0] == "POST"]) == 1
+
+
+def test_merge_mode_is_not_coerced_from_text_or_numbers(demo):
+    item = save(demo)
+    for mode in ["true", "false", 1, 0]:
+        assert demo[2].post(f"/api/development/{item['id']}/send", json={"fingerprint": item["merge_fingerprint"], "auto_merge": mode}).status_code == 422
     assert demo[1].calls == []

@@ -16,6 +16,7 @@ class Draft(BaseModel):
 class Send(BaseModel):
     model_config = ConfigDict(extra="forbid")
     fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    auto_merge: bool = Field(default=False, strict=True)
 
 
 def local_operator(request: Request):
@@ -63,7 +64,7 @@ def router(service):
     async def send(request_id: str, body: Send, request: Request):
         local_operator(request)
         try:
-            return await service.send(request_id, body.fingerprint)
+            return await service.send(request_id, body.fingerprint, body.auto_merge)
         except DevelopmentError as error:
             raise HTTPException(error.status, str(error)) from None
 

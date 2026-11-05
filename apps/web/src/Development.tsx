@@ -3,7 +3,7 @@ import { api } from "./api";
 import "./development.css";
 
 type Change = {
-  id: string; text: string; fingerprint: string; state: string;
+  id: string; text: string; fingerprint: string; merge_fingerprint: string; auto_merge: boolean; state: string;
   run_url: string | null; pr_url: string | null; pr_number: number | null;
   merge_sha: string | null; error: string | null;
 };
@@ -88,7 +88,7 @@ export default function Development() {
       <label htmlFor="development-feedback">What should change?</label>
       <textarea id="development-feedback" rows={4} value={text} maxLength={8000}
         disabled={busy || !snapshot?.enabled} onChange={(event) => setText(event.target.value)}
-        placeholder="For example: rename the History tab to Activity, and explain what is shown there." />
+        placeholder="For example: add monitoring that alerts when room temperature drops 3°C within 10 minutes." />
       <div className="development-actions">
         {SpeechRecognition && <button type="button" disabled={busy || !snapshot?.enabled}
           aria-pressed={listening} onClick={() => listening ? recognition.current?.stop() : listen()}>
@@ -103,9 +103,13 @@ export default function Development() {
       <p className="development-request">{item.text}</p>
       {item.error && <p className="development-error">{item.error}</p>}
       {["draft", "failed_to_dispatch"].includes(item.state) && <div>
-        <p className="development-caption">Send this exact request to {snapshot.repository}? Claude can propose interface and documentation changes for this demo.</p>
+        <p className="development-caption">Send this exact request to {snapshot.repository}? Claude can implement backend features, interface changes and bug fixes for review.</p>
+        <p className="development-caption">Merging updates the repository after validation. Installing that revision on the demo Mac is a separate approval.</p>
         <button disabled={busy} onClick={() => void perform(() => api<Change>(`/development/${item.id}/send`, { fingerprint: item.fingerprint }))}>
-          Send to cloud Claude
+          Implement and open a PR
+        </button>
+        <button disabled={busy} onClick={() => void perform(() => api<Change>(`/development/${item.id}/send`, { fingerprint: item.merge_fingerprint, auto_merge: true }))}>
+          Implement and merge after checks
         </button>
       </div>}
       <div className="development-actions">
@@ -114,6 +118,7 @@ export default function Development() {
         {!["draft", "failed_to_dispatch"].includes(item.state) && <button disabled={busy}
           onClick={() => void perform(() => api<Change>(`/development/${item.id}/refresh`, {}))}>Refresh status</button>}
       </div>
+      {!["draft", "failed_to_dispatch"].includes(item.state) && <p className="development-caption">{item.auto_merge ? "Authorized to merge scoped code after checks pass. Local installation still needs approval." : "Review-only: the cloud workflow will leave a draft PR."}</p>}
       {item.state === "merged" && item.merge_sha && <div className="development-update">
         <p>Review the merged revision, then run this on the demo Mac to approve its local update:</p>
         <code>python3 scripts/local_demo.py update --pr {item.pr_number} --approve-sha {item.merge_sha}</code>

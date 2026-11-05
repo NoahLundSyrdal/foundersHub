@@ -2,7 +2,7 @@
 
 Claude edits and tests code on a **GitHub-hosted runner**. Anders's Mac runs the app and this small release supervisor; it does not run Claude Code, a coding SDK, a shell controlled by the conversation model, or a self-hosted GitHub Actions runner.
 
-The updater is an explicit owner action in a terminal. A spoken request can create a development request, but cannot grant release authority. The dashboard can show the PR and the update command; it never executes that command.
+The updater is an explicit owner action in a terminal. A spoken request can create a development draft, but cannot grant release authority. The local Improve view can authorize a checked repository merge; installing that revision on the Mac remains separate. The dashboard shows the merged PR and update command; it never executes that command.
 
 ## First setup on the demo Mac
 
@@ -32,14 +32,14 @@ Open **http://127.0.0.1:5173**. The supervisor starts the Python API on `127.0.0
 
 ## Install a reviewed improvement
 
-Review Claude's PR, wait for checks, and merge it through GitHub. In another terminal on the demo Mac, approve its **merged commit SHA**, not its branch/head SHA:
+Inspect Claude's PR after the selected manual or automatic merge mode succeeds. In another terminal on the demo Mac, approve its **merged commit SHA**, not an unmerged branch/head SHA:
 
 ```sh
 python3 scripts/local_demo.py update --pr 123 --approve-sha FULL_REVIEWED_MERGE_SHA
 python3 scripts/local_demo.py status
 ```
 
-The updater checks the merged PR targets this repository's `main` and matches the exact approved SHA; fetches from the fixed repository URL; rejects backwards/divergent updates; verifies the exact SHA's completed successful `Office checks` from the GitHub Actions application; rejects other pending/failing Actions checks; and refuses a dirty source checkout. It also checks again after dependency preparation, so a newer check re-run cannot be ignored during installation.
+The updater checks the merged PR targets this repository's `main` and matches the exact approved SHA; fetches from the fixed repository URL; rejects backwards/divergent updates; verifies the exact SHA's completed successful `Office checks` from the GitHub Actions application; rejects other pending/failing Actions checks; and refuses a dirty source checkout. Automatic cloud merges attest their exact tested revision because a bot push does not trigger another workflow; manual merges use the ordinary push checks. It also checks again after dependency preparation, so a newer check re-run cannot be ignored during installation.
 
 It archives that approved Git revision into ignored `.data/local-demo/releases/<sha>` rather than checking out or overwriting the developer's working tree. It shares the source checkout's ignored `.env` and `.data`, installs the existing dependency versions, builds the web app, and verifies tracked source files still match Git after installation. Dependencies' install/build scripts run locally only after explicit SHA approval; the coding agent stays remote. A prepared release is selected atomically in `.data/local-demo/release.json`.
 
