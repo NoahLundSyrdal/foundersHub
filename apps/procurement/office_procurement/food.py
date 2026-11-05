@@ -28,7 +28,8 @@ class FoodSelection(StrictModel):
 
 
 NORWEGIAN = {"coffee": "kaffe", "milk": "melk", "bananas": "banan", "bread": "brød", "water": "vann",
-             "juice": "juice", "tea": "te", "pizza": "pizza"}
+             "juice": "juice", "tea": "te", "pizza": "pizza",
+             "fruit": "frukt", "snacks": "snacks", "sugar": "sukker", "cups": "krus"}
 
 
 def _clarify(question: str) -> dict:
@@ -126,7 +127,7 @@ async def plan_groceries(need: GroceryNeed, search_results: list[dict], model: s
                                         "office manager: when package size or brand is not specified, choose a standard office-appropriate "
                                         "package (for coffee, a regular 0.5-1 kg pack) and keep the requested pack quantity. A person reviews "
                                         "and approves the basket before it reaches the cart, so prefer a sensible proposal over a question. "
-                                        "Ask a question only if the product itself is genuinely ambiguous or a stated diet/allergen "
+                                        "Never ask about package size, brand, variety (e.g. with/without pulp), or how many packs: choose the most ordinary option yourself. " "Ask a question only if the product itself is genuinely ambiguous or a stated diet/allergen "
                                         "requirement cannot be verified from the data. Never infer dietary guarantees. "
                                         "Give a concise source-supported reason. Delivery fees are unknown; no checkout or payment."))
             async with asyncio.timeout(20):

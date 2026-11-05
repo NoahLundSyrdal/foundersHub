@@ -132,7 +132,9 @@ def mock_grocery(request: WorkerInput) -> Interpretation | None:
     text = request.text.lower()
     foods = {"coffee": r"coffee|kaffe", "milk": r"milk|melk", "bananas": r"bananas?|bananer?",
              "pizza": r"pizza", "bread": r"bread|brød", "water": r"water|vann",
-             "juice": r"juice", "tea": r"tea|te"}
+             "juice": r"(?:orange\s*)?juice|appelsin(?:juice|saft)|eplejuice|eplemost|saft", "tea": r"tea|te",
+             "fruit": r"fruit|frukt|epler?|apples?", "snacks": r"snacks?|kjeks|nøtter|nuts", "sugar": r"sugar|sukker",
+             "cups": r"paper cups|pappkrus|kopper"}
     found = []
     for name, alias in foods.items():
         match = re.search(r"\b(?:" + alias + r")\b", text)
@@ -225,10 +227,15 @@ def create_agent(model: str | Model) -> Agent[Context, Interpretation]:
                       "Interpret an office supply or repair request into exactly one structured need. "
                       "If grocery_enabled is true, food and drinks (including coffee) use intent grocery with item_id null, "
                       "root quantity 1, routine assessment and grocery:{items:[{query,quantity}],summary,question:null}. "
-                      "Food query describes the requested food and package constraints; quantity is the explicit requested pack count (1..20). "
+                      "Food query describes the requested food (in the shopper's language, e.g. Norwegian 'appelsinjuice') and any "
+                      "stated package constraints; quantity is the requested pack count (1..20). Act like an experienced office "
+                      "manager and make reasonable assumptions instead of asking: if no amount is given use 1 pack; 'a lot', "
+                      "'big/heavy order', 'mye', 'tung bestilling' means 3 packs; number words like 'to/tre' are counts; an unstated "
+                      "package size or variety means a standard office-sized pack of the most ordinary variety. The basket is always "
+                      "shown to a person for approval before anything reaches the cart, so propose rather than ask. "
                       "Several foods may form one grocery need (max10); never use fixture catalogue food prices. "
-                      "Generic order-food, recipes, catering/headcount without item quantities, or unclear dietary/allergen needs "
-                      "require clarification; do not invent meals, quantities or dietary requirements. "
+                      "Never ask about package size, brand, variety (e.g. with/without pulp), or how many packs: choose the most ordinary option yourself. " "Ask only when it is genuinely impossible to tell which food is meant (e.g. just 'order food' or 'lunch for "
+                      "everyone' with no items) or when a stated diet/allergen requirement must be met; never invent dietary guarantees. "
                       "If grocery_enabled is false preserve the approved catalogue workflow and never emit grocery. "
                       "Nonfood faults and critical hazards remain maintenance. "
                       "Use list_catalogue and office_policy to see the approved scope. Multiple distinct needs "
@@ -240,8 +247,8 @@ def create_agent(model: str | Model) -> Agent[Context, Interpretation]:
                       "Severity is business impact: routine for normal replenishment, urgent for material disruption or repair, "
                       "critical for reported immediate safety hazards such as gas, fire, smoke, flooding or electric shock. "
                       "Critical, hazardous or safety-related work always requires confirmation. Repair and air-quality service scope "
-                      "also needs confirmation. Confidence below 0.8 always requires confirmation; preserve uncertainty and ask "
-                      "clarifying questions instead of guessing. Routine well-specified supplies may not need confirmation, "
+                      "also needs confirmation. Confidence below 0.8 always requires confirmation (set requires_confirmation, which a "
+                      "person reviews) rather than asking a question for routine supplies and food. Routine supplies may not need confirmation, "
                       "but urgency and your assessment never grant spending authority or override office approval policy. "
                       "Give a concise operational reason, not private reasoning. Do not add a separate assessment tool call. "
                       "Low CO2 alone is not evidence of poor ventilation; ask to confirm measurement/unit/threshold. "
